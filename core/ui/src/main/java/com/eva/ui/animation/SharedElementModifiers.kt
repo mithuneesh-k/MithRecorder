@@ -7,8 +7,6 @@ import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.animation.SharedTransitionScope
-import androidx.compose.animation.SharedTransitionScope.ResizeMode
-import androidx.compose.animation.SharedTransitionScope.ResizeMode.Companion.ScaleToBounds
 import androidx.compose.animation.core.Spring.StiffnessMediumLow
 import androidx.compose.animation.core.VisibilityThreshold
 import androidx.compose.animation.core.spring
@@ -32,7 +30,7 @@ fun Modifier.sharedElementWrapper(
 	key: Any,
 	renderInOverlayDuringTransition: Boolean = true,
 	zIndexInOverlay: Float = 0f,
-	placeHolderSize: SharedTransitionScope.PlaceHolderSize = SharedTransitionScope.PlaceHolderSize.contentSize,
+	placeHolderSize: SharedTransitionScope.PlaceholderSize = SharedTransitionScope.PlaceholderSize.ContentSize,
 	boundsTransform: BoundsTransform = BoundsTransform { _, _ -> NormalSpring },
 ) = composed {
 	val transitionScope = LocalSharedTransitionScopeProvider.current ?: return@composed Modifier
@@ -47,7 +45,7 @@ fun Modifier.sharedElementWrapper(
 			animatedVisibilityScope = visibilityScope,
 			renderInOverlayDuringTransition = renderInOverlayDuringTransition,
 			zIndexInOverlay = zIndexInOverlay,
-			placeHolderSize = placeHolderSize,
+			placeholderSize = placeHolderSize,
 			boundsTransform = boundsTransform
 		)
 	}
@@ -58,9 +56,9 @@ fun Modifier.sharedBoundsWrapper(
 	enter: EnterTransition = fadeIn(),
 	exit: ExitTransition = fadeOut(),
 	renderInOverlayDuringTransition: Boolean = true,
-	resizeMode: ResizeMode = ScaleToBounds(ContentScale.FillWidth, Center),
+	resizeMode: SharedTransitionScope.ResizeMode = SharedTransitionScope.ResizeMode.scaleToBounds(ContentScale.FillWidth, Center),
 	zIndexInOverlay: Float = 0f,
-	placeHolderSize: SharedTransitionScope.PlaceHolderSize = SharedTransitionScope.PlaceHolderSize.contentSize,
+	placeHolderSize: SharedTransitionScope.PlaceholderSize = SharedTransitionScope.PlaceholderSize.ContentSize,
 	boundsTransform: BoundsTransform = BoundsTransform { _, _ -> NormalSpring },
 ) = composed {
 
@@ -79,7 +77,7 @@ fun Modifier.sharedBoundsWrapper(
 			boundsTransform = boundsTransform,
 			renderInOverlayDuringTransition = renderInOverlayDuringTransition,
 			zIndexInOverlay = zIndexInOverlay,
-			placeHolderSize = placeHolderSize,
+			placeholderSize = placeHolderSize,
 			resizeMode = resizeMode,
 		)
 	}
