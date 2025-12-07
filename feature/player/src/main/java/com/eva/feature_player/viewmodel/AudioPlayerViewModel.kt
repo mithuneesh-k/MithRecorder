@@ -119,10 +119,9 @@ internal class AudioPlayerViewModel @AssistedInject constructor(
 
 	private fun setAudioModel() = viewModelScope.launch {
 		val result = fileProvider.getAudioFileFromId(audioId)
-		result.fold(
-			onSuccess = { data -> _currentFile.update { data } },
-			onFailure = { error -> _uiEvents.emit(UIEvents.ShowSnackBar(error.message ?: "")) },
-		)
+		val file = result.getOrNull() ?: return@launch
+		// error is not captured here
+		_currentFile.update { file }
 	}
 
 	override fun onCleared() {

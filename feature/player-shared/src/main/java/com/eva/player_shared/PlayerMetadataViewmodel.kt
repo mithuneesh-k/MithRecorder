@@ -19,12 +19,13 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChangedBy
+import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
-import kotlinx.coroutines.flow.updateAndGet
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -48,7 +49,10 @@ class PlayerMetadataViewmodel @Inject constructor(
 
 
 	val loadState = combine(_isAudioLoaded, _currentAudio, transform = ::prepareLoadState)
-		.onStart { loadAudioFile() }
+		.onStart {
+			loadAudioFile()
+			setShortCut()
+		}
 		.stateIn(
 			scope = viewModelScope,
 			started = SharingStarted.WhileSubscribed(8_000),
@@ -69,6 +73,14 @@ class PlayerMetadataViewmodel @Inject constructor(
 		}
 	}
 
+	private fun setShortCut() {
+		// set shortcut only when resource is loaded distinct by id ensures not to call it again
+		// for simple metadata change
+		_currentAudio.filterNotNull().distinctUntilChangedBy { it.id }
+			.onEach { model -> shortcutFacade.addLastPlayedShortcut(model.id) }
+			.launchIn(viewModelScope)
+	}
+
 	private fun loadAudioFile() = fileProviderUseCase.invoke(audioId)
 		.onEach { res ->
 			when (res) {
@@ -81,10 +93,7 @@ class PlayerMetadataViewmodel @Inject constructor(
 
 				is Resource.Success -> {
 					_isAudioLoaded.update { true }
-					val model = _currentAudio.updateAndGet { res.data } ?: res.data
-					// set shortcut only when resource is loaded
-					// this ensures shortcut is only added if the content is properly
-					shortcutFacade.addLastPlayedShortcut(model.id)
+					_currentAudio.update { res.data }
 				}
 			}
 		}.launchIn(viewModelScope)

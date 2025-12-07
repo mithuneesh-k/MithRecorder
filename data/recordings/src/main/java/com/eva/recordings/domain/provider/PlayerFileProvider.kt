@@ -8,7 +8,7 @@ typealias ResourcedDetailedRecordingModel = Resource<AudioFileModel, Exception>
 
 interface PlayerFileProvider {
 
-	fun providesAudioFileUri(audioId: Long): String
+	suspend fun providesAudioFileUri(audioId: Long): Result<String>
 
 	fun getAudioFileFromIdFlow(
 		id: Long,

@@ -17,9 +17,11 @@ import androidx.core.os.bundleOf
 import com.eva.datastore.domain.repository.RecorderAudioSettingsRepo
 import com.eva.location.domain.repository.LocationAddressProvider
 import com.eva.location.domain.utils.parseLocationFromString
+import com.eva.recordings.BuildConfig
+import com.eva.recordings.data.utils.evaluateWithTimeRead
 import com.eva.recordings.data.wrapper.RecordingsConstants
 import com.eva.recordings.data.wrapper.RecordingsContentResolverWrapper
-import com.eva.recordings.domain.exceptions.InvalidRecordingIdException
+import com.eva.recordings.domain.exceptions.InvalidAudioFileIdException
 import com.eva.recordings.domain.models.AudioFileModel
 import com.eva.recordings.domain.models.MediaMetaDataInfo
 import com.eva.recordings.domain.provider.PlayerFileProvider
@@ -56,8 +58,20 @@ internal class PlayerFileProviderImpl(
 			MediaStore.Audio.AudioColumns.MIME_TYPE,
 		)
 
-	override fun providesAudioFileUri(audioId: Long): String {
-		return ContentUris.withAppendedId(RecordingsConstants.AUDIO_VOLUME_URI, audioId).toString()
+	override suspend fun providesAudioFileUri(audioId: Long): Result<String> {
+		return withContext(Dispatchers.IO) {
+			try {
+				val contentURI =
+					ContentUris.withAppendedId(RecordingsConstants.AUDIO_VOLUME_URI, audioId)
+				contentResolver.query(contentURI, arrayOf(MediaStore.MediaColumns._ID), null, null)
+					?.use { cursor ->
+						if (cursor.count > 0) Result.success(contentURI.toString())
+						else return@withContext Result.failure(InvalidAudioFileIdException())
+					} ?: return@withContext Result.failure(InvalidAudioFileIdException())
+			} catch (_: Exception) {
+				Result.failure(InvalidAudioFileIdException())
+			}
+		}
 	}
 
 	override fun getAudioFileFromIdFlow(
@@ -68,14 +82,26 @@ internal class PlayerFileProviderImpl(
 			// send loading
 			trySend(Resource.Loading)
 
-			// send the data
 			launch(Dispatchers.IO) {
-				// evaluate it and send
-				val first = getAudioFileFromId(id, readMetaData)
-				first.fold(
-					onSuccess = { send(Resource.Success(it)) },
-					onFailure = {
-						send(Resource.Error(Exception(it)))
+				val result = getAudioFileFromId(id, false)
+				result.fold(
+					onSuccess = { model ->
+						// send the data without metadata
+						send(Resource.Success(model))
+						// evaluate metadata
+						val metaData = evaluateWithTimeRead(
+							loggingTag = TAG,
+							readTime = BuildConfig.DEBUG
+						) {
+							if (!readMetaData) return@evaluateWithTimeRead null
+							extractMediaInfo(model.fileUri.toUri())
+						}
+						val modelWithMetaData = model.copy(metaData = metaData)
+						// send data with metadata
+						send(Resource.Success(modelWithMetaData))
+					},
+					onFailure = { err ->
+						if (err is Exception) send(Resource.Error(err))
 					},
 				)
 			}
@@ -126,13 +152,17 @@ internal class PlayerFileProviderImpl(
 					null
 				)?.use { cur ->
 					val result = evaluateValuesFromCursor(cur)
-						?: return@withContext Result.failure(InvalidRecordingIdException())
-					val metadata = if (readMetaData) {
-						Log.d(TAG, "READING METADATA")
+						?: return@withContext Result.failure(InvalidAudioFileIdException())
+
+					val metaData = evaluateWithTimeRead(
+						loggingTag = TAG,
+						readTime = BuildConfig.DEBUG
+					) {
+						if (!readMetaData) return@use result
 						extractMediaInfo(result.fileUri.toUri())
-					} else null
-					result.copy(metaData = metadata)
-				} ?: return@withContext Result.failure(InvalidRecordingIdException())
+					}
+					result.copy(metaData = metaData)
+				} ?: return@withContext Result.failure(InvalidAudioFileIdException())
 			}
 		}
 	}
