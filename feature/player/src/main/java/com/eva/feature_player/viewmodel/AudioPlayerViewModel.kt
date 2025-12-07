@@ -13,6 +13,7 @@ import com.eva.ui.viewmodel.UIEvents
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -71,14 +72,18 @@ internal class AudioPlayerViewModel @AssistedInject constructor(
 	override val uiEvent: SharedFlow<UIEvents>
 		get() = _uiEvents.asSharedFlow()
 
+	private var _controllerSetUp: Job? = null
 
 	fun onControllerEvents(event: ControllerEvents) {
 		when (event) {
-			is ControllerEvents.OnAddController -> viewModelScope.launch {
-				player.prepareController(event.audioId)
+			is ControllerEvents.OnAddController -> {
+				_controllerSetUp = viewModelScope.launch { player.prepareController(event.audioId) }
 			}
 
-			ControllerEvents.OnRemoveController -> player.cleanUp()
+			ControllerEvents.OnRemoveController -> {
+				_controllerSetUp?.cancel()
+				player.cleanUp()
+			}
 		}
 	}
 
@@ -122,7 +127,7 @@ internal class AudioPlayerViewModel @AssistedInject constructor(
 
 	override fun onCleared() {
 		// cleanup for controller
+		_controllerSetUp?.cancel()
 		player.cleanUp()
-		super.onCleared()
 	}
 }

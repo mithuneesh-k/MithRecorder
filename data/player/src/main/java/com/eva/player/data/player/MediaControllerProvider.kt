@@ -9,6 +9,7 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionError
 import androidx.media3.session.SessionToken
+import com.eva.player.data.MediaPlayerConstants
 import com.eva.player.data.service.MediaPlayerService
 import com.eva.player.domain.AudioFilePlayer
 import com.eva.player.domain.model.PlayerMetaData
@@ -16,15 +17,15 @@ import com.eva.player.domain.model.PlayerPlayBackSpeed
 import com.eva.player.domain.model.PlayerTrackData
 import com.eva.recordings.domain.models.AudioFileModel
 import com.eva.utils.tryWithLock
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.flatMapLatest
-import kotlinx.coroutines.flow.getAndUpdate
-import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.withContext
 import kotlin.time.Duration
@@ -32,46 +33,57 @@ import kotlin.time.Duration
 private const val TAG = "PLAYED_MEDIA_CONTROLLER"
 
 @OptIn(ExperimentalCoroutinesApi::class)
+@androidx.annotation.OptIn(UnstableApi::class)
 internal class MediaControllerProvider(private val context: Context) : AudioFilePlayer {
 
 	@Volatile
 	private var _controller: MediaController? = null
 	private var _lock = Mutex()
 
-	private val _playerFlow = MutableStateFlow<AudioFilePlayer?>(null)
-	private val _isConnected = MutableStateFlow(false)
-
-	private val _currentPlayer: Flow<AudioFilePlayer> =
-		combine(_isConnected, _playerFlow) { connected, player ->
-			if (connected && player != null) player else null
-		}.filterNotNull()
+	private val _playerState: MutableStateFlow<MediaControllerState> =
+		MutableStateFlow(MediaControllerState.Disconnected)
 
 	private val player: AudioFilePlayer?
-		get() = _playerFlow.value
+		get() = (_playerState.value as? MediaControllerState.Connected)?.player
 
 	override val trackInfoAsFlow: Flow<PlayerTrackData>
-		get() = _currentPlayer.flatMapLatest { player -> player.trackInfoAsFlow }
+		get() = _playerState.flatMapLatest { state ->
+			when (state) {
+				is MediaControllerState.Connected -> state.player.trackInfoAsFlow
+				else -> emptyFlow()
+			}
+		}
 
 	override val playerMetaDataFlow: Flow<PlayerMetaData>
-		get() = _currentPlayer.flatMapLatest { player -> player.playerMetaDataFlow }
+		get() = _playerState.flatMapLatest { state ->
+			when (state) {
+				is MediaControllerState.Connected -> state.player.playerMetaDataFlow
+				else -> emptyFlow()
+			}
+		}
 
 	override val isPlaying: Flow<Boolean>
-		get() = _currentPlayer.flatMapLatest { player -> player.isPlaying }
+		get() = _playerState.flatMapLatest { state ->
+			when (state) {
+				is MediaControllerState.Connected -> state.player.isPlaying
+				else -> flowOf(false)
+			}
+		}
 
 	override val isControllerReady: Flow<Boolean>
-		get() = _isConnected
+		get() = _playerState.map { state -> state is MediaControllerState.Connected }
 
-	@androidx.annotation.OptIn(UnstableApi::class)
 	private val _controllerListener = object : MediaController.Listener {
 
 		override fun onDisconnected(controller: MediaController) {
 			super.onDisconnected(controller)
 			Log.i(TAG, "MEDIA CONTROLLER DISCONNECTED")
-			// update is connected
-			_isConnected.update { false }
-			// clear the player
-			val oldInstance = _playerFlow.getAndUpdate { null }
-			oldInstance?.cleanUp()
+			// clear the player if its connected state
+			val oldInstance = _playerState.value
+			if (oldInstance is MediaControllerState.Connected)
+				oldInstance.player.cleanUp()
+			// then disconnect the controller
+			_playerState.value = MediaControllerState.Disconnected
 		}
 
 		override fun onError(controller: MediaController, sessionError: SessionError) {
@@ -81,20 +93,20 @@ internal class MediaControllerProvider(private val context: Context) : AudioFile
 	}
 
 	override suspend fun prepareController(audioId: Long) {
-
-		val sessionExtras = bundleOf(MediaPlayerService.PLAYER_AUDIO_FILE_ID_KEY to audioId)
+		if (_controller != null) {
+			Log.d(TAG, "CONTROLLER IS ALREADY SET ")
+			return
+		}
+		val sessionExtras = bundleOf(MediaPlayerConstants.PLAYER_AUDIO_FILE_ID_KEY to audioId)
 
 		val sessionToken = SessionToken(
 			context,
 			ComponentName(context, MediaPlayerService::class.java)
 		)
 		_lock.tryWithLock(this) {
-			if (_controller != null) {
-				Log.d(TAG, "CONTROLLER IS ALREADY SET ")
-				return
-			}
 			try {
-				Log.d(TAG, "PREPARING THE PLAYER")
+				_playerState.value = MediaControllerState.Connecting
+				Log.d(TAG, "PREPARING THE CONTROLLER")
 				// prepare the controller future
 				withContext(Dispatchers.Main.immediate) {
 					MediaController.Builder(context, sessionToken)
@@ -106,11 +118,11 @@ internal class MediaControllerProvider(private val context: Context) : AudioFile
 				}
 				Log.i(TAG, "CONTROLLER CREATED")
 				// set the player instance
-				_isConnected.update { _controller?.isConnected ?: false }
-				_playerFlow.value = _controller?.let { player -> AudioFilePlayerImpl(player) }
+				val player = AudioFilePlayerImpl(_controller!!)
+				_playerState.value = MediaControllerState.Connected(player)
 			} catch (e: Exception) {
 				Log.e(TAG, "FAILED TO RESOLVE FUTURE", e)
-				e.printStackTrace()
+				if (e !is CancellationException) e.printStackTrace()
 			}
 		}
 	}
@@ -125,13 +137,23 @@ internal class MediaControllerProvider(private val context: Context) : AudioFile
 	}
 
 	override fun cleanUp() {
-		Log.d(TAG, "CLEARING UP CONTROLLER")
-		// release the controller if not released
-		_controller?.release()
-		_controller = null
-		// perform player cleanup
-		val oldInstance = _playerFlow.getAndUpdate { null }
-		oldInstance?.cleanUp()
+		try {
+			if (_controller == null) {
+				Log.d(TAG, "CONTROLLER ALREADY RELEASED")
+				return
+			}
+			// perform player cleanup
+			val oldInstance = _playerState.value
+			if (oldInstance is MediaControllerState.Connected)
+				oldInstance.player.cleanUp()
+			// release the controller if not released
+			_controller?.release()
+
+		} finally {
+			Log.d(TAG, "CONTROLLER CLEANED")
+			_controller = null
+			_playerState.value = MediaControllerState.Disconnected
+		}
 	}
 
 	override fun onMuteDevice() {
