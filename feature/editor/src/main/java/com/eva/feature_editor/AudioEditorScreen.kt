@@ -88,7 +88,10 @@ internal fun AudioEditorScreenContainer(
 			loadState = loadState,
 			onSuccess = content,
 			onFailed = {
-				AudioFileNotFoundBox(modifier = Modifier.align(Alignment.Center))
+				AudioFileNotFoundBox(
+					onNavigateToList = {},
+					modifier = Modifier.align(Alignment.Center)
+				)
 			},
 		)
 	}

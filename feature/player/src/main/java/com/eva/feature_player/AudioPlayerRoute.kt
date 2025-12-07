@@ -25,6 +25,7 @@ import com.eva.player_shared.PlayerMetadataViewmodel
 import com.eva.player_shared.PlayerVisualizerViewmodel
 import com.eva.ui.R
 import com.eva.ui.navigation.NavDialogs
+import com.eva.ui.navigation.NavRoutes
 import com.eva.ui.navigation.PlayerSubGraph
 import com.eva.ui.navigation.animatedComposable
 import com.eva.ui.utils.LocalSharedTransitionVisibilityScopeProvider
@@ -111,6 +112,11 @@ fun NavGraphBuilder.audioPlayerRoute(controller: NavHostController) =
 					if (lifeCycleState.isAtLeast(Lifecycle.State.RESUMED)) {
 						val dialog = NavDialogs.RenameRecordingDialog(audioId)
 						controller.navigate(dialog)
+					}
+				},
+				onNavigateToRecordings = {
+					controller.navigate(NavRoutes.VoiceRecordings) {
+						popUpTo<PlayerSubGraph.AudioPlayerRoute>()
 					}
 				},
 				navigation = {

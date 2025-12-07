@@ -3,16 +3,12 @@ package com.eva.player_shared.composables
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedContentTransitionScope
 import androidx.compose.animation.ContentTransform
-import androidx.compose.animation.core.FastOutLinearInEasing
 import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.FiniteAnimationSpec
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
@@ -43,7 +39,7 @@ fun <T> ContentStateAnimatedContainer(
 		derivedStateOf {
 			when (loadState) {
 				is ContentLoadState.Content -> PlainContentState.IS_SUCCESS
-				ContentLoadState.Loading -> PlainContentState.IS_SUCCESS
+				ContentLoadState.Loading -> PlainContentState.IS_LOADING
 				ContentLoadState.Unknown -> PlainContentState.IS_ERROR
 			}
 		}
@@ -81,34 +77,42 @@ private enum class PlainContentState {
 	IS_ERROR,
 }
 
-private fun AnimatedContentTransitionScope<PlainContentState>.animateLoadState(): ContentTransform {
-	val loadContentTransition: FiniteAnimationSpec<Float> = tween(
-		durationMillis = 800,
-		easing = FastOutSlowInEasing
-	)
+private fun AnimatedContentTransitionScope<PlainContentState>.animateLoadState(
+	transitionDuration: Int = 250,
+	delayDuration: Int = 50
+): ContentTransform {
+	return when (initialState) {
+		PlainContentState.IS_LOADING if targetState == PlainContentState.IS_SUCCESS -> {
+			fadeIn(
+				animationSpec = tween(
+					durationMillis = transitionDuration,
+					delayMillis = delayDuration
+				)
+			) + scaleIn(
+				initialScale = 0.9f,
+				animationSpec = tween(
+					durationMillis = transitionDuration,
+					delayMillis = delayDuration,
+					easing = FastOutSlowInEasing
+				)
+			) togetherWith fadeOut(animationSpec = tween(durationMillis = transitionDuration / 2))
+		}
 
-	val normalTransition: FiniteAnimationSpec<Float> = tween(
-		durationMillis = 200,
-		delayMillis = 60,
-		easing = FastOutLinearInEasing
-	)
+		PlainContentState.IS_LOADING if targetState == PlainContentState.IS_ERROR -> {
+			slideInVertically(
+				animationSpec = tween(
+					durationMillis = transitionDuration,
+					easing = FastOutSlowInEasing
+				),
+				initialOffsetY = { fullHeight -> -fullHeight / 4 }
+			) + fadeIn(
+				animationSpec = tween(durationMillis = transitionDuration)
+			) togetherWith fadeOut(animationSpec = tween(durationMillis = transitionDuration / 2))
+		}
 
-	return if (initialState == PlainContentState.IS_LOADING && targetState == PlainContentState.IS_SUCCESS) {
-		fadeIn(animationSpec = loadContentTransition) + expandVertically(
-			animationSpec = spring(
-				dampingRatio = Spring.DampingRatioLowBouncy,
-				stiffness = Spring.StiffnessLow
-			),
-			expandFrom = Alignment.CenterVertically,
-		) togetherWith
-				fadeOut(loadContentTransition) + shrinkVertically(
-			animationSpec = spring(
-				dampingRatio = Spring.DampingRatioLowBouncy,
-				stiffness = Spring.StiffnessLow
-			),
-			shrinkTowards = Alignment.CenterVertically,
-		)
-	} else fadeIn(normalTransition) togetherWith fadeOut(normalTransition)
+		else -> fadeIn(animationSpec = tween(durationMillis = transitionDuration)) togetherWith
+				fadeOut(animationSpec = tween(durationMillis = transitionDuration))
+	}
 }
 
 class ContentLoadStatePreviewParams : CollectionPreviewParameterProvider<AudioFileModelLoadState>(

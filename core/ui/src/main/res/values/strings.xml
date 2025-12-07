@@ -268,4 +268,5 @@
   <string name="action_previous">Previous</string>
   <string name="action_continue">Continue</string>
   <string name="onboarding_page_welcome_message">Welcome to %s</string>
+  <string name="move_back_to_list">Go back to List</string>
 </resources>

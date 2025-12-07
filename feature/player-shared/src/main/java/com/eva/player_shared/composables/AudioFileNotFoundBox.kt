@@ -7,7 +7,8 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.sizeIn
+import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -17,13 +18,17 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.PreviewLightDark
 import androidx.compose.ui.unit.dp
 import com.eva.ui.R
 import com.eva.ui.theme.RecorderAppTheme
 
 @Composable
-fun AudioFileNotFoundBox(modifier: Modifier = Modifier) {
+fun AudioFileNotFoundBox(
+	onNavigateToList: () -> Unit,
+	modifier: Modifier = Modifier
+) {
 	Column(
 		modifier = modifier.defaultMinSize(minWidth = 200.dp, minHeight = 260.dp),
 		horizontalAlignment = Alignment.CenterHorizontally,
@@ -33,12 +38,13 @@ fun AudioFileNotFoundBox(modifier: Modifier = Modifier) {
 			painter = painterResource(id = R.drawable.ic_music_file),
 			contentDescription = stringResource(id = R.string.music_file_not_found_title),
 			colorFilter = ColorFilter.tint(color = MaterialTheme.colorScheme.primary),
-			modifier = Modifier.size(180.dp)
+			modifier = Modifier.sizeIn(minWidth = 280.dp, minHeight = 280.dp)
 		)
 		Spacer(modifier = Modifier.height(12.dp))
 		Text(
 			text = stringResource(id = R.string.music_file_not_found_title),
 			style = MaterialTheme.typography.titleLarge,
+			fontWeight = FontWeight.SemiBold,
 			color = MaterialTheme.colorScheme.onBackground
 		)
 		Text(
@@ -46,6 +52,13 @@ fun AudioFileNotFoundBox(modifier: Modifier = Modifier) {
 			style = MaterialTheme.typography.bodyLarge,
 			color = MaterialTheme.colorScheme.onBackground
 		)
+		Spacer(modifier = Modifier.height(20.dp))
+		Button(
+			onClick = onNavigateToList,
+			shape = MaterialTheme.shapes.medium
+		) {
+			Text(text = stringResource(R.string.move_back_to_list))
+		}
 	}
 }
 
@@ -54,6 +67,7 @@ fun AudioFileNotFoundBox(modifier: Modifier = Modifier) {
 private fun AudioFileNotFoundBoxPreview() = RecorderAppTheme {
 	Surface {
 		AudioFileNotFoundBox(
+			onNavigateToList = {},
 			modifier = Modifier.padding(20.dp)
 		)
 	}

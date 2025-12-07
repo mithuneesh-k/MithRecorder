@@ -81,6 +81,7 @@ internal fun AudioPlayerScreen(
 	navigation: @Composable () -> Unit = {},
 	onNavigateToEdit: () -> Unit = {},
 	onRenameItem: (Long) -> Unit = {},
+	onNavigateToRecordings: () -> Unit = {},
 ) {
 
 	val snackBarProvider = LocalSnackBarProvider.current
@@ -142,11 +143,14 @@ internal fun AudioPlayerScreen(
 				)
 			},
 			onFailed = {
-				AudioFileNotFoundBox(modifier = Modifier.align(Alignment.Center))
+				AudioFileNotFoundBox(
+					onNavigateToList = onNavigateToRecordings,
+					modifier = Modifier.align(Alignment.Center)
+				)
 			},
 			onLoading = {
 				Column(
-					verticalArrangement = Arrangement.spacedBy(8.dp),
+					verticalArrangement = Arrangement.spacedBy(16.dp),
 					horizontalAlignment = Alignment.CenterHorizontally,
 					modifier = Modifier.align(Alignment.Center)
 				) {
