@@ -11,6 +11,8 @@ import android.os.Looper
 import android.util.Log
 import com.com.visualizer.domain.exception.ExtractorNoTrackFoundException
 import com.com.visualizer.domain.exception.InvalidMimeTypeException
+import com.com.visualizer.utils.isThreadAlive
+import com.com.visualizer.utils.safePOST
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
@@ -42,6 +44,8 @@ internal class MediaCodecPCMDataDecoder(
 	private val seekDurationMillis: Int,
 	private val handler: Handler? = null,
 ) : MediaCodec.Callback() {
+
+	val ioDispatcher = Dispatchers.IO.limitedParallelism(1)
 
 	@Volatile
 	private var _mediaCodec: MediaCodec? = null
@@ -187,7 +191,7 @@ internal class MediaCodecPCMDataDecoder(
 	}
 
 	override fun onOutputFormatChanged(codec: MediaCodec, format: MediaFormat) {
-		Log.i(CODEC_TAG, "MEDIA FORMAT CHANGED: $format")
+		Log.d(CODEC_TAG, "MEDIA FORMAT CHANGED: $format")
 	}
 
 	private fun handleFloatArray(pcm: FloatArray) {
@@ -265,28 +269,27 @@ internal class MediaCodecPCMDataDecoder(
 		_onDecodeComplete = listener
 	}
 
-	@Synchronized
-	fun initiateExtraction(context: Context, fileURI: Uri): Result<Unit> {
-		_extractor?.release()
-		_extractor = MediaExtractor().apply {
-			setDataSource(context, fileURI, null)
+	suspend fun initiateExtraction(context: Context, fileURI: Uri): Result<Unit> =
+		withContext(ioDispatcher) {
+			_extractor?.release()
+			_extractor = MediaExtractor().apply {
+				setDataSource(context, fileURI, null)
+			}
+			val format = _extractor?.getTrackFormat(0)
+			val mimeType = format?.mimeType
+
+			if (mimeType == null || !mimeType.startsWith("audio"))
+				return@withContext Result.failure(InvalidMimeTypeException())
+
+			if (_extractor?.trackCount == 0)
+				return@withContext Result.failure(ExtractorNoTrackFoundException())
+
+			Log.i(EXTRACTOR_TAG, "EXTRACTOR PREPARED")
+			_extractor?.selectTrack(0)
+			_totalTimeInMs.store(format.duration.inWholeMilliseconds)
+			initiateCodec(format)
+			Result.success(Unit)
 		}
-		val format = _extractor?.getTrackFormat(0)
-		val mimeType = format?.mimeType
-
-		if (mimeType == null || !mimeType.startsWith("audio"))
-			return Result.failure(InvalidMimeTypeException())
-
-		if (_extractor?.trackCount == 0)
-			return Result.failure(ExtractorNoTrackFoundException())
-
-		Log.i(EXTRACTOR_TAG, "EXTRACTOR PREPARED")
-		_extractor?.selectTrack(0)
-		_totalTimeInMs.store(format.duration.inWholeMilliseconds)
-
-		initiateCodec(format)
-		return Result.success(Unit)
-	}
 
 
 	private fun initiateCodec(format: MediaFormat) {
@@ -301,6 +304,11 @@ internal class MediaCodecPCMDataDecoder(
 		_mediaCodec?.reset()
 		_codecState = MediaCodecState.STOPPED
 
+		val isAlive = handler?.isThreadAlive() ?: false
+
+		Log.i(CODEC_TAG, "HANDLER THREAD ALIVE :$isAlive")
+		if (!isAlive) return
+
 		// codec is configured
 		val codecName = _codecList.findDecoderForFormat(format)
 		_mediaCodec = MediaCodec.createByCodecName(codecName).apply {
@@ -308,13 +316,20 @@ internal class MediaCodecPCMDataDecoder(
 			configure(format, null, null, 0)
 		}
 
-		Log.i(CODEC_TAG, "MEDIA CODEC CONFIGURED THREAD:${handler?.looper?.thread}")
+		Log.i(CODEC_TAG, "MEDIA CODEC CONFIGURED THREAD:${handler.looper.thread}")
 		Log.d(CODEC_TAG, "MEDIA CODEC NAME :${_mediaCodec?.name}")
 
-		// codec is started
-		_mediaCodec?.start()
-		_codecState = MediaCodecState.EXEC
-		Log.i(CODEC_TAG, "MEDIA CODEC STARTED CURRENT STATE :$_codecState")
+		val caller = Runnable {
+			_mediaCodec?.start()
+			_codecState = MediaCodecState.EXEC
+			Log.i(CODEC_TAG, "MEDIA CODEC STARTED ON :${Thread.currentThread()}")
+		}
+		// start the codec
+		if (handler.looper == Looper.getMainLooper()) caller.run()
+		else {
+			val isPosted = handler.post(caller)
+			if (!isPosted) caller.run()
+		}
 	}
 
 
@@ -328,11 +343,13 @@ internal class MediaCodecPCMDataDecoder(
 		Log.d(PROCESSING_TAG, "CANCELLING OPERATIONS SCOPE")
 		_scope.cancel()
 
+		val caller = Runnable { codecClean() }
+
 		if (handler == null || handler.looper == Looper.getMainLooper()) {
-			codecClean()
+			caller.run()
 		} else {
-			val isPosted = handler.post { codecClean() }
-			Log.i(CODEC_TAG, "CLEAN UP POSTED! :$isPosted")
+			val isPosted = handler.safePOST(caller)
+			if (!isPosted) caller.run()
 		}
 
 	}
@@ -365,7 +382,7 @@ internal class MediaCodecPCMDataDecoder(
 			Log.e(CODEC_TAG, "FAILED TO CLEAR CALLBACK", e)
 		}
 
-			// release the codec
+		// release the codec
 		try {
 			_mediaCodec?.release()
 			Log.i(CODEC_TAG, "MEDIA CODEC RELEASED")

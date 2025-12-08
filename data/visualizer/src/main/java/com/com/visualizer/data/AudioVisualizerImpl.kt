@@ -19,7 +19,6 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import kotlinx.coroutines.withContext
 
 private const val TAG = "PLAIN_VISUALIZER"
 
@@ -57,8 +56,7 @@ internal class AudioVisualizerImpl(
 		fileUri: String,
 		lifecycleOwner: LifecycleOwner,
 		timePerPointInMs: Int
-	): Result<Unit> {
-
+	): Result<Unit> = _lock.withLock {
 		if (_decoder != null) {
 			Log.d(TAG, "CLEAN DECODER TO PREPARE IT AGAIN")
 			return Result.failure(DecoderExistsException())
@@ -66,23 +64,27 @@ internal class AudioVisualizerImpl(
 
 		val handler = threadHandler.bindToLifecycle(lifecycleOwner)
 
-		return withContext(Dispatchers.IO) {
-			try {
-				_lock.withLock {
-					_decoder = MediaCodecPCMDataDecoder(
-						handler = handler,
-						seekDurationMillis = timePerPointInMs,
-					)
-				}
-				_decoder?.setOnBufferDecode(::updateVisuals)
-				_decoder?.setOnComplete(::releaseObjects)
-				_decoder?.initiateExtraction(context, fileUri.toUri())
+		return try {
+			val decoder = MediaCodecPCMDataDecoder(
+				handler = handler,
+				seekDurationMillis = timePerPointInMs,
+			).also { _decoder = it }
 
-				Result.success(Unit)
-			} catch (e: Exception) {
-				Log.e(TAG, "CANNOT DECODE THIS URI", e)
-				Result.failure(e)
+			Log.i(TAG, "MEDIA CODEC DECODER CREATED")
+
+			// setup callbacks
+			decoder.setOnBufferDecode(::updateVisuals)
+			decoder.setOnComplete {
+				Log.d(TAG, "DECODER JOB IS DONE RELEASING THE HANDLER")
+				// release the objects
+				releaseDecoder()
+				// decoder work is done so we can kill it now
+				if (handler != null) threadHandler.stopThread(handler)
 			}
+			decoder.initiateExtraction(context, fileUri.toUri())
+		} catch (e: Exception) {
+			Log.e(TAG, "CANNOT DECODE THIS URI", e)
+			Result.failure(e)
 		}
 	}
 
@@ -91,24 +93,22 @@ internal class AudioVisualizerImpl(
 		_visualization.update { it + array }
 	}
 
-	private fun releaseObjects() {
-		if (_lock.tryLock()) {
-			try {
-				Log.d(TAG, "CLEARING UP OBJECTS")
-				_decoder?.cleanUp()
-			} finally {
-				_decoder = null
-				_lock.unlock()
-			}
+	private fun releaseDecoder() {
+		try {
+			_decoder?.cleanUp()
+		} finally {
+			Log.d(TAG, "DECODER CLEANED!")
+			_decoder = null
+			_isReady.update { VisualizerState.FINISHED }
 		}
-		_isReady.update { VisualizerState.FINISHED }
 	}
 
 	override fun cleanUp() {
+		Log.d(TAG, "CLEARING UP THE VISUALIZER")
+		// release the objects
+		releaseDecoder()
 		// reset values
 		_visualization.update { floatArrayOf() }
-		// release the objects
-		releaseObjects()
 	}
 
 }
