@@ -1,12 +1,14 @@
 package com.eva.feature_player
 
 import android.content.Intent
+import androidx.compose.animation.SharedTransitionScope
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
@@ -24,6 +26,8 @@ import com.eva.feature_player.viewmodel.PlayerViewmodelFactory
 import com.eva.player_shared.PlayerMetadataViewmodel
 import com.eva.player_shared.PlayerVisualizerViewmodel
 import com.eva.ui.R
+import com.eva.ui.animation.SharedElementTransitionKeys
+import com.eva.ui.animation.sharedBoundsWrapper
 import com.eva.ui.navigation.NavDialogs
 import com.eva.ui.navigation.NavRoutes
 import com.eva.ui.navigation.PlayerSubGraph
@@ -93,7 +97,6 @@ fun NavGraphBuilder.audioPlayerRoute(controller: NavHostController) =
 
 		CompositionLocalProvider(LocalSharedTransitionVisibilityScopeProvider provides this) {
 			AudioPlayerScreen(
-				audioId = route.audioId,
 				loadState = contentState,
 				bookmarks = bookMarks,
 				waveforms = { visuals },
@@ -106,7 +109,7 @@ fun NavGraphBuilder.audioPlayerRoute(controller: NavHostController) =
 				onPlayerEvents = playerViewModel::onPlayerEvents,
 				onBookmarkEvent = bookmarkViewmodel::onBookMarkEvent,
 				onNavigateToEdit = dropUnlessResumed {
-					controller.navigate(PlayerSubGraph.AudioEditorRoute)
+					controller.navigate(PlayerSubGraph.AudioEditorRoute(route.audioId))
 				},
 				onRenameItem = { audioId ->
 					if (lifeCycleState.isAtLeast(Lifecycle.State.RESUMED)) {
@@ -131,7 +134,11 @@ fun NavGraphBuilder.audioPlayerRoute(controller: NavHostController) =
 						}
 					}
 				},
-			)
+				modifier = Modifier.sharedBoundsWrapper(
+						key = SharedElementTransitionKeys.recordSharedEntryContainer(route.audioId),
+						resizeMode = SharedTransitionScope.ResizeMode.RemeasureToBounds,
+					),
+				)
 		}
 	}
 

@@ -2,7 +2,7 @@ package com.eva.feature_player.composable
 
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.ContentTransform
-import androidx.compose.animation.ExperimentalSharedTransitionApi
+import androidx.compose.animation.SharedTransitionScope
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -44,10 +44,7 @@ import com.eva.ui.R
 import com.eva.ui.animation.SharedElementTransitionKeys
 import com.eva.ui.animation.sharedBoundsWrapper
 
-@OptIn(
-	ExperimentalMaterial3Api::class,
-	ExperimentalSharedTransitionApi::class
-)
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun AudioPlayerScreenTopBar(
 	loadState: ContentLoadState<AudioFileModel>,
@@ -130,7 +127,9 @@ internal fun AudioPlayerScreenTopBar(
 						IconButton(
 							onClick = onEdit,
 							modifier = Modifier.sharedBoundsWrapper(
-								key = SharedElementTransitionKeys.RECORDING_EDITOR_SHARED_BOUNDS
+								key = SharedElementTransitionKeys.RECORDING_EDITOR_SHARED_BOUNDS,
+								resizeMode = SharedTransitionScope.ResizeMode.RemeasureToBounds,
+								clipShape = MaterialTheme.shapes.large
 							),
 						) {
 							Icon(
