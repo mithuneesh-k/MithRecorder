@@ -5,6 +5,10 @@ plugins {
 
 android {
 	namespace = "com.eva.recordings"
+
+	buildFeatures {
+		buildConfig = true
+	}
 }
 
 dependencies {

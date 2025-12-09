@@ -13,11 +13,19 @@ import kotlinx.coroutines.flow.map
 
 private const val TAG = "PLAYER_PLAYING_FLOW"
 
+private fun Player.currentPlayState() = when {
+	playbackState == Player.STATE_BUFFERING -> PlayerPlayState.BUFFERING
+	isPlaying -> PlayerPlayState.PLAYING
+	else -> PlayerPlayState.PAUSED
+}
+
 fun Player.computePlayerPlayState(): Flow<PlayerPlayState> = callbackFlow {
 
 	var isSeeking = false
 	// initially send a false
-	trySend(PlayerPlayState.PAUSED)
+	val initial = currentPlayState()
+	trySend(initial)
+	Log.d(TAG, "INITIAL STATE $initial")
 
 	val listener = object : Player.Listener {
 
@@ -33,7 +41,7 @@ fun Player.computePlayerPlayState(): Flow<PlayerPlayState> = callbackFlow {
 		override fun onIsPlayingChanged(isPlaying: Boolean) {
 			// skip is playing condition if the player is seeking
 			if (isSeeking) return
-			val state = if (isPlaying) PlayerPlayState.PLAYING else PlayerPlayState.PAUSED
+			val state = currentPlayState()
 			Log.d(TAG, "PLAYER IS PLAYING CHANGED :$state")
 			trySend(state)
 		}
@@ -56,7 +64,7 @@ fun Player.computePlayerPlayState(): Flow<PlayerPlayState> = callbackFlow {
 
 		override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
 			if (reason != Player.PLAY_WHEN_READY_CHANGE_REASON_USER_REQUEST) return
-			val state = if (playWhenReady) PlayerPlayState.PLAYING else PlayerPlayState.PAUSED
+			val state = currentPlayState()
 			Log.d(TAG, "PLAY WHEN READY CHANGED :$state")
 			trySend(state)
 		}

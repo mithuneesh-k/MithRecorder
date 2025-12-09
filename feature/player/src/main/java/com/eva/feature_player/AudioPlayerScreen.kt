@@ -1,11 +1,5 @@
 package com.eva.feature_player
 
-import androidx.compose.animation.ExperimentalSharedTransitionApi
-import androidx.compose.animation.SharedTransitionScope
-import androidx.compose.animation.core.EaseOut
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -52,20 +46,16 @@ import com.eva.player_shared.util.AudioFileModelLoadState
 import com.eva.player_shared.util.PlayerGraphData
 import com.eva.player_shared.util.PlayerPreviewFakes
 import com.eva.ui.R
-import com.eva.ui.animation.SharedElementTransitionKeys
-import com.eva.ui.animation.sharedBoundsWrapper
 import com.eva.ui.theme.RecorderAppTheme
 import com.eva.ui.utils.LocalSnackBarProvider
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.coroutines.launch
 
 @OptIn(
-	ExperimentalSharedTransitionApi::class,
 	ExperimentalMaterial3Api::class
 )
 @Composable
 internal fun AudioPlayerScreen(
-	audioId: Long,
 	loadState: AudioFileModelLoadState,
 	waveforms: PlayerGraphData,
 	bookMarkState: CreateBookmarkState,
@@ -81,6 +71,7 @@ internal fun AudioPlayerScreen(
 	navigation: @Composable () -> Unit = {},
 	onNavigateToEdit: () -> Unit = {},
 	onRenameItem: (Long) -> Unit = {},
+	onNavigateToRecordings: () -> Unit = {},
 ) {
 
 	val snackBarProvider = LocalSnackBarProvider.current
@@ -114,12 +105,7 @@ internal fun AudioPlayerScreen(
 			)
 		},
 		snackbarHost = { SnackbarHost(hostState = snackBarProvider) },
-		modifier = modifier.sharedBoundsWrapper(
-			key = SharedElementTransitionKeys.recordSharedEntryContainer(audioId),
-			resizeMode = SharedTransitionScope.ResizeMode.RemeasureToBounds,
-			enter = fadeIn(animationSpec = tween(easing = EaseOut, durationMillis = 300)),
-			exit = fadeOut(animationSpec = tween(easing = EaseOut, durationMillis = 300)),
-		),
+		modifier = modifier,
 	) { scPadding ->
 		ContentStateAnimatedContainer(
 			loadState = loadState,
@@ -142,11 +128,14 @@ internal fun AudioPlayerScreen(
 				)
 			},
 			onFailed = {
-				AudioFileNotFoundBox(modifier = Modifier.align(Alignment.Center))
+				AudioFileNotFoundBox(
+					onNavigateToList = onNavigateToRecordings,
+					modifier = Modifier.align(Alignment.Center)
+				)
 			},
 			onLoading = {
 				Column(
-					verticalArrangement = Arrangement.spacedBy(8.dp),
+					verticalArrangement = Arrangement.spacedBy(16.dp),
 					horizontalAlignment = Alignment.CenterHorizontally,
 					modifier = Modifier.align(Alignment.Center)
 				) {
@@ -169,7 +158,6 @@ private fun AudioPlayerScreenPreview(
 	loadState: AudioFileModelLoadState
 ) = RecorderAppTheme {
 	AudioPlayerScreen(
-		audioId = 0,
 		loadState = loadState,
 		waveforms = { PlayerPreviewFakes.PREVIEW_RECORDER_AMPLITUDES },
 		trackData = { PlayerTrackData(total = PlayerPreviewFakes.FAKE_AUDIO_MODEL.duration) },

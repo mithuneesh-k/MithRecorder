@@ -235,4 +235,5 @@
   <string name="action_previous">আগের</string>
   <string name="action_continue">শুরু করুন</string>
   <string name="onboarding_page_welcome_message">%s এ স্বাগত</string>
+  <string name="move_back_to_list">লিস্টে ফিরে যান</string>
 </resources>

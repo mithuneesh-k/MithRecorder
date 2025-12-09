@@ -14,6 +14,7 @@ import com.eva.feature_editor.undoredo.UndoRedoManager
 import com.eva.feature_editor.undoredo.UndoRedoState
 import com.eva.player.domain.model.PlayerTrackData
 import com.eva.recordings.domain.models.AudioFileModel
+import com.eva.recordings.domain.provider.PlayerFileProvider
 import com.eva.ui.viewmodel.AppViewModel
 import com.eva.ui.viewmodel.UIEvents
 import dagger.assisted.Assisted
@@ -41,12 +42,14 @@ import kotlin.time.Duration
 
 @HiltViewModel(assistedFactory = EditorViewmodelFactory::class)
 internal class AudioEditorViewModel @AssistedInject constructor(
-	@Assisted private val fileModel: AudioFileModel,
+	@Assisted private val audioId: Long,
+	private val fileProvider: PlayerFileProvider,
 	private val transformer: AudioTransformer,
 	private val saver: EditedItemSaver,
 	private val player: SimpleAudioPlayer,
 ) : AppViewModel() {
 
+	private val _currentFile = MutableStateFlow<AudioFileModel?>(null)
 	private val _lastEditAction = MutableStateFlow(AudioEditAction.CROP)
 	private val _exportFileUri = MutableStateFlow<String?>(null)
 
@@ -98,7 +101,7 @@ internal class AudioEditorViewModel @AssistedInject constructor(
 	val trackData = player.trackInfoAsFlow.stateIn(
 		scope = viewModelScope,
 		started = SharingStarted.WhileSubscribed(1_000L),
-		initialValue = PlayerTrackData(total = fileModel.duration)
+		initialValue = PlayerTrackData()
 	)
 
 	private val _uiEvents = MutableSharedFlow<UIEvents>()
@@ -120,7 +123,18 @@ internal class AudioEditorViewModel @AssistedInject constructor(
 		EditorScreenEvent.OnCancelTransformation -> cancelFinalExport()
 	}
 
-	suspend fun setPlayerItem() = player.prepareAudioFile(fileModel)
+	fun setPlayerItem() = viewModelScope.launch {
+		val result = fileProvider.getAudioFileFromId(audioId, false)
+		result.fold(
+			onSuccess = { fileModel ->
+				_currentFile.update { fileModel }
+				player.prepareAudioFile(fileModel)
+			},
+			onFailure = { err ->
+				_uiEvents.emit(UIEvents.ShowSnackBar(err.message ?: ""))
+			},
+		)
+	}
 
 	fun hasMediaItemChanged() {
 		player.isMediaItemChanged.onEach {
@@ -136,7 +150,10 @@ internal class AudioEditorViewModel @AssistedInject constructor(
 	private fun validateAndApplyEditViaAction(action: AudioEditAction) {
 		viewModelScope.launch {
 			val clipData = _clipData.value ?: return@launch
-			val trackData = trackData.value
+			val fileModel = _currentFile.value ?: return@launch
+			// use the fallback value from the file duration
+			val trackData = trackData.value.let { if (it.allPositiveAndFinite) it else null }
+				?: PlayerTrackData(Duration.ZERO, fileModel.duration)
 
 			if (clipData.start == Duration.ZERO && clipData.end == trackData.total) {
 				val message = when (action) {
@@ -171,34 +188,39 @@ internal class AudioEditorViewModel @AssistedInject constructor(
 		}
 	}
 
-	fun onUndoOrRedoConfigs(isUndo: Boolean) {
-		viewModelScope.launch {
-			// new clipping config
-			val clippingData = if (isUndo) _undoRedoManager.undo()
-			else _undoRedoManager.redo()
-
-			val filteredData = clippingData.filter { (config, _) -> config.hasMinimumDuration }
-
-			val result = player.editMediaPortions(fileModel, filteredData)
-			result.fold(
-				onSuccess = {},
-				onFailure = { _uiEvents.emit(UIEvents.ShowSnackBar(it.message ?: "Some error")) },
-			)
+	fun onUndoOrRedoConfigs(isUndo: Boolean) = viewModelScope.launch {
+		val fileModel = _currentFile.value ?: run {
+			_uiEvents.emit(UIEvents.ShowToast("No Audio model found"))
+			return@launch
 		}
+		// new clipping config
+		val clippingData = if (isUndo) _undoRedoManager.undo()
+		else _undoRedoManager.redo()
+
+		val filteredData = clippingData.filter { (config, _) -> config.hasMinimumDuration }
+
+		val result = player.editMediaPortions(fileModel, filteredData)
+		result.fold(
+			onSuccess = {},
+			onFailure = { _uiEvents.emit(UIEvents.ShowSnackBar(it.message ?: "Some error")) },
+		)
 	}
 
 
 	private fun updateClipConfig(clipConfig: AudioClipConfig) {
-		val track = trackData.value
+		val fileModel = _currentFile.value ?: return
 		val clipData = _clipData.updateAndGet { clipConfig } ?: return
-		if (track.current in clipData.start..clipData.end) return
+		// again if track data is not
+		val trackData = this@AudioEditorViewModel.trackData.value.let { if (it.allPositiveAndFinite) it else null }
+			?: PlayerTrackData(Duration.ZERO, fileModel.duration)
+		if (trackData.current in clipData.start..clipData.end) return
 
 		if (!clipData.hasMinimumDuration) {
 			val message = "Editor needs a ${AudioClipConfig.MIN_CLIP_DURATION} clip"
 			viewModelScope.launch { _uiEvents.emit(UIEvents.ShowSnackBar(message)) }
 		}
 
-		val seekDuration = with(trackData.value) {
+		val seekDuration = with(trackData) {
 			val distanceToStart =
 				abs(current.inWholeMilliseconds - clipData.start.inWholeMilliseconds)
 			val distanceToEnd = abs(current.inWholeMilliseconds - clipData.end.inWholeMilliseconds)
@@ -210,6 +232,7 @@ internal class AudioEditorViewModel @AssistedInject constructor(
 
 
 	private fun onSaveExportFile() {
+		val fileModel = _currentFile.value ?: return
 		val fileUri = _exportFileUri.value ?: return
 		// will trigger a navigation event to recordings screen
 		viewModelScope.launch {
@@ -230,6 +253,7 @@ internal class AudioEditorViewModel @AssistedInject constructor(
 	}
 
 	private fun finalExport() {
+		val fileModel = _currentFile.value ?: return
 		_exportJob?.cancel()
 		_exportJob = viewModelScope.launch {
 

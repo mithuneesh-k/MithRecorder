@@ -17,6 +17,7 @@ import com.eva.ui.viewmodel.UIEvents
 import com.eva.utils.RecorderConstants
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -46,18 +47,17 @@ class PlayerVisualizerViewmodel @Inject constructor(
 	private val _compressedVisualization = MutableStateFlow(floatArrayOf())
 	private val _clipConfigs = MutableStateFlow<AudioConfigToActionList>(emptyList())
 
-	// basic flag
-	private var _isVisualizerStarted = false
-
 	private val _uiEvents = MutableSharedFlow<UIEvents>()
 	override val uiEvent: SharedFlow<UIEvents>
 		get() = _uiEvents
+
+	private var _prepareVisualsJob: Job? = null
 
 	val isVisualsReady = visualizer.visualizerState
 		.map { it != VisualizerState.NOT_STARTED }
 		.stateIn(
 			scope = viewModelScope,
-			started = SharingStarted.WhileSubscribed(5_000L),
+			started = SharingStarted.Eagerly,
 			initialValue = false
 		)
 
@@ -65,7 +65,7 @@ class PlayerVisualizerViewmodel @Inject constructor(
 		.onStart { prepareVisuals() }
 		.stateIn(
 			scope = viewModelScope,
-			started = SharingStarted.WhileSubscribed(5_000),
+			started = SharingStarted.WhileSubscribed(10_000),
 			initialValue = floatArrayOf()
 		)
 
@@ -85,16 +85,22 @@ class PlayerVisualizerViewmodel @Inject constructor(
 
 	private fun prepareVisuals() {
 		// if started once don't start again
-		if (!_isVisualizerStarted) return
-		_isVisualizerStarted = true
+		if (_prepareVisualsJob?.isActive == true) return
 
-		visualizer.visualizerState.onEach { state ->
+		_prepareVisualsJob = visualizer.visualizerState.onEach { state ->
 			// only run this if the visualizer not in finished or running state
-			if (state != VisualizerState.NOT_STARTED) return@onEach
+			if (state != VisualizerState.NOT_STARTED) {
+				_prepareVisualsJob?.cancel()
+				return@onEach
+			}
+
+			val fileResult = playerFileProvider.providesAudioFileUri(route.audioId)
+			// no error propagation
+			val fileURI = fileResult.getOrNull() ?: return@onEach
 
 			val result = visualizer.prepareVisualization(
 				lifecycleOwner = _lifecycleOwner,
-				fileUri = playerFileProvider.providesAudioFileUri(route.audioId),
+				fileUri = fileURI,
 				timePerPointInMs = RecorderConstants.RECORDER_AMPLITUDES_BUFFER_SIZE
 			)
 			result.onFailure { err ->

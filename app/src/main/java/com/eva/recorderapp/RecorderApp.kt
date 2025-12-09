@@ -3,8 +3,10 @@ package com.eva.recorderapp
 import android.app.Application
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.os.StrictMode
 import androidx.compose.runtime.Composer
 import androidx.compose.runtime.ExperimentalComposeRuntimeApi
+import androidx.compose.runtime.tooling.ComposeStackTraceMode
 import androidx.core.app.NotificationCompat
 import androidx.core.content.getSystemService
 import androidx.hilt.work.HiltWorkerFactory
@@ -37,8 +39,8 @@ class RecorderApp : Application(), Configuration.Provider {
 	override fun onCreate() {
 		super.onCreate()
 
-		// enabled compose stack-trace
-		Composer.setDiagnosticStackTraceEnabled(enabled = BuildConfig.DEBUG)
+		enableComposeStackTrace()
+		enableStrictMode()
 
 		createNotificationChannels()
 
@@ -85,5 +87,29 @@ class RecorderApp : Application(), Configuration.Provider {
 		val channels = listOf(channel1, channel2, channel3)
 
 		notificationManager?.createNotificationChannels(channels)
+	}
+
+
+	private fun enableComposeStackTrace() {
+		if (!BuildConfig.DEBUG) return
+		Composer.setDiagnosticStackTraceMode(ComposeStackTraceMode.SourceInformation)
+	}
+
+	private fun enableStrictMode() {
+		if (!BuildConfig.DEBUG) return
+		// thread policy
+		StrictMode.setThreadPolicy(
+			StrictMode.ThreadPolicy.Builder()
+				.detectAll()  // Detect all thread violations
+				.penaltyLog() // Log to console
+				.build()
+		)
+
+		StrictMode.setVmPolicy(
+			StrictMode.VmPolicy.Builder()
+				.detectAll()  // Detect all VM violations
+				.penaltyLog()
+				.build()
+		)
 	}
 }

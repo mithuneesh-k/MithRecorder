@@ -68,7 +68,7 @@ object PlayerServiceModule {
 		@Named("SERVICE_PLAYER") player: Player,
 	): MediaSession {
 
-		val callback = AudioPlayerMediaCallBacks()
+		val callback = AudioPlayerMediaCallBacks(context)
 
 		val extras = bundleOf(
 			MediaConstants.EXTRAS_KEY_SLOT_RESERVATION_SEEK_TO_NEXT to true,

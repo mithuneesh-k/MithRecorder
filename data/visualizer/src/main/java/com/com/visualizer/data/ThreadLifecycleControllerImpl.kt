@@ -9,10 +9,13 @@ import androidx.annotation.MainThread
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
 import com.com.visualizer.domain.ThreadController
+import kotlin.concurrent.atomics.AtomicBoolean
+import kotlin.concurrent.atomics.ExperimentalAtomicApi
 import kotlin.time.measureTime
 
 private const val TAG = "THREAD_CONTROLLER"
 
+@OptIn(ExperimentalAtomicApi::class)
 internal class ThreadLifecycleControllerImpl(private val threadName: String) :
 	DefaultLifecycleObserver, ThreadController {
 
@@ -26,16 +29,45 @@ internal class ThreadLifecycleControllerImpl(private val threadName: String) :
 		Log.e(TAG, "THREADING ERRORS NAME:${thread.name} STATE:${thread.state}", exc)
 	}
 
+	private val _isStopping = AtomicBoolean(false)
+
 	override fun onDestroy(owner: LifecycleOwner) {
-		owner.lifecycle.removeObserver(this)
-		stopThread()
+		try {
+			val requested = _isStopping.load()
+			if (requested) return
+			if (_handler == null) return
+			Log.d(TAG, "STOP THREAD ON END_OF_LIFECYCLE")
+			stopThreadInternal(600L)
+		} finally {
+			_isStopping.store(false)
+			owner.lifecycle.addObserver(this@ThreadLifecycleControllerImpl)
+			Log.d(TAG, "THREAD OBSERVER REMOVED!")
+		}
 	}
 
 	@MainThread
 	@Synchronized
 	override fun bindToLifecycle(lifecycleOwner: LifecycleOwner): Handler {
 		lifecycleOwner.lifecycle.addObserver(this@ThreadLifecycleControllerImpl)
+		Log.d(TAG, "NEW THREAD OBSERVER ADDED!!")
 		return getHandler()
+	}
+
+	override fun stopThread(handler: Handler?, maxWaitTime: Long) {
+		if (_handler?.looper?.thread?.thId != handler?.looper?.thread?.thId) {
+			Log.w(TAG, "INCORRECT HANDLER PROVIDED CANNOT STOP CURRENT")
+			Log.w(TAG, "CURRENT THREAD THREAD :${Thread.currentThread()}")
+			return
+		}
+		try {
+			val requested = _isStopping.load()
+			if (requested) return
+			if (_handler == null) return
+			Log.d(TAG, "STOP THREAD VIA CALL")
+			stopThreadInternal(maxWaitTime)
+		} finally {
+			_isStopping.store(false)
+		}
 	}
 
 	private fun getHandler(): Handler {
@@ -43,9 +75,6 @@ internal class ThreadLifecycleControllerImpl(private val threadName: String) :
 		return _handler!!
 	}
 
-	/**
-	 * Prepares the handler for use
-	 */
 	@Suppress("DEPRECATION")
 	@Synchronized
 	private fun createThread() {
@@ -62,14 +91,11 @@ internal class ThreadLifecycleControllerImpl(private val threadName: String) :
 		_handlerThread = newThread
 		_handler = Handler.createAsync(newThread.looper)
 
-		val threadId = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.BAKLAVA)
-			newThread.threadId() else newThread.id
-
 		val message = buildString {
 			append("HANDLER THREAD IS SET: ")
 			append("NAME: ${newThread.name} |")
 			append("STATE: ${newThread.looper.thread.state} |")
-			append("ID: $threadId |")
+			append("ID: ${newThread.thId} |")
 			append("PRIORITY :${newThread.priority}")
 		}
 		Log.i(TAG, message)
@@ -80,16 +106,16 @@ internal class ThreadLifecycleControllerImpl(private val threadName: String) :
 	 * @param maxWaitTime Time in millis the thread should wait for thread to die
 	 */
 	@Synchronized
-	private fun stopThread(maxWaitTime: Long = 600L) {
+	private fun stopThreadInternal(maxWaitTime: Long) {
 		require(maxWaitTime > 0) { "Wait time need to be greater than 0" }
 
 		val handlerThread = _handlerThread ?: run {
-			Log.d(TAG, "HANDLER THREAD WAS NOT SET")
+			Log.w(TAG, "HANDLER THREAD WAS NOT SET OR ALREADY HANDLED")
 			return
 		}
 		val handler = _handler ?: return
 		handler.removeCallbacksAndMessages(null)
-
+		Log.i(TAG, "STOPPING THREAD THREAD_ID:${handler.looper.thread.thId}")
 		try {
 			val safeRequest = if (handlerThread.isAlive)
 				handlerThread.quitSafely() else false
@@ -98,22 +124,25 @@ internal class ThreadLifecycleControllerImpl(private val threadName: String) :
 				Log.d(TAG, "LOOPER WAS NOT SET OF THE THREAD IS ALREADY KILLED")
 				return
 			}
-			Log.i(TAG, "THREAD QUIT, THREAD STATE: ${handlerThread.state}")
+			Log.i(TAG, "THREAD STATE BEFORE JOIN: ${handlerThread.state}")
 			// blocking code
 			val duration = measureTime { handlerThread.join(maxWaitTime) }
-			Log.d(TAG, "THREAD CURRENT STATE: ${handlerThread.state}")
 			Log.d(TAG, "JOIN TOOK :$duration")
+			Log.i(TAG, "THREAD STATE AFTER JOIN: ${handlerThread.state}")
 
 		} catch (e: InterruptedException) {
 			Log.e(TAG, "THREAD JOIN FAILED", e)
 			e.printStackTrace()
 		} finally {
-			Log.v(TAG, "AFTER CLEAN UP")
-			Log.v(TAG, "STATE: ${_handlerThread?.state}")
+			Log.i(TAG, "CLEANING UP DONE!")
+			Log.d(TAG, "AFTER CLEAN UP STATE: ${_handlerThread?.state}")
 			_handlerThread?.uncaughtExceptionHandler = null
 			_handlerThread = null
 			_handler = null
-			//
 		}
 	}
+
+	@Suppress("DEPRECATION")
+	private val Thread.thId: Long
+		get() = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.BAKLAVA) threadId() else id
 }

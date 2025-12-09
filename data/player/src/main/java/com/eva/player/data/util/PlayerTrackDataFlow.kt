@@ -31,10 +31,29 @@ fun Player.computePlayerTrackData(
 	// first emission
 	launch {
 		val trackData = this@computePlayerTrackData.toTrackData()
+		Log.d(TAG, "INITIAL DATA :$trackData")
+		// send only if there is some duration info available
+		// if invalid will be filter out later
 		send(trackData)
 	}
 
 	var job: Job? = null
+	fun startPeriodicUpdates() {
+		job?.cancel()
+		job = launch {
+			try {
+				while (isActive) {
+					val trackData = toTrackData()
+					if (trackData.allPositiveAndFinite) trySend(trackData)
+					delay(delayDuration)
+				}
+			} catch (_: CancellationException) {
+				Log.d(TAG, "ADVERTISE COROUTINE CANCELLED")
+			} catch (e: Exception) {
+				e.printStackTrace()
+			}
+		}
+	}
 
 	val listener = object : Player.Listener {
 
@@ -63,23 +82,18 @@ fun Player.computePlayerTrackData(
 		}
 
 		override fun onIsPlayingChanged(isPlaying: Boolean) {
-			// cancel the old coroutine
-			job?.cancel()
-			// if playing launch a new job to observe
-			job = launch(Dispatchers.Main) {
-				try {
-					// advertise data if its active and canLoop
-					while (isPlaying && isActive) {
-						val trackData = this@computePlayerTrackData.toTrackData()
-						if (!trackData.allPositiveAndFinite) continue
-						send(trackData)
-						// create a delay
-						delay(delayDuration)
-					}
-				} catch (_: CancellationException) {
-					Log.d(TAG, "CANNOT ADVERTISE DATA ANY MORE COROUTINE CANCELLED")
-				} catch (e: Exception) {
-					e.printStackTrace()
+			if (isPlaying) {
+				Log.d(TAG, "STARTING PERIODIC UPDATES")
+				startPeriodicUpdates()
+			} else {
+				Log.d(TAG, "PERIODIC UPDATES STOPPED")
+				// cancel the old coroutine
+				// and emit current track info
+				job?.cancel()
+				job = null
+				launch {
+					val track = this@computePlayerTrackData.toTrackData()
+					send(track)
 				}
 			}
 		}
@@ -128,6 +142,12 @@ fun Player.computePlayerTrackData(
 	// add the listener
 	Log.d(TAG, "LISTENER ADDED")
 	addListener(listener)
+
+	// if this already playing start periodic updates
+	if (isPlaying) {
+		Log.d(TAG, "PLAYER IS ALREADY PLAYING SO PERIODIC UPDATES")
+		startPeriodicUpdates()
+	}
 
 	//remove the listener
 	awaitClose {
