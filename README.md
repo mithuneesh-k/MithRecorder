@@ -76,8 +76,7 @@ playing stuff.
 
 ## :new: What's new
 
-The latest update to the **RecorderApp** contains a new onboarding screen added with some settings
-route improvements
+The latest update to the **RecorderApp** contains some improvements with the media player
 
 ## :next_track_button: What's next
 
@@ -124,5 +123,5 @@ GitHub. Your feedback is invaluable!
 
 ### :end: Conclusion
 
-The app can be marked as finished for now.A significant amount of time and effort has been invested
+The app can be marked as finished for now. A significant amount of time and effort has been invested
 in this project hope you all love it.
