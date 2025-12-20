@@ -1,5 +1,6 @@
 package com.eva.feature_editor
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.SharedTransitionScope
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -24,6 +25,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -31,9 +33,11 @@ import androidx.compose.ui.res.dimensionResource
 import androidx.compose.ui.tooling.preview.PreviewLightDark
 import androidx.compose.ui.tooling.preview.PreviewParameter
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.DialogProperties
 import com.eva.editor.domain.model.AudioClipConfig
 import com.eva.feature_editor.composables.AudioClipChipRow
 import com.eva.feature_editor.composables.EditorActionsAndControls
+import com.eva.feature_editor.composables.EditorBackHandlerDialog
 import com.eva.feature_editor.composables.EditorTopBar
 import com.eva.feature_editor.composables.PlayerTrimSelector
 import com.eva.feature_editor.composables.TransformBottomSheet
@@ -76,9 +80,15 @@ internal fun AudioEditorScreen(
 	undoRedoState: UndoRedoState = UndoRedoState(),
 	transformationState: TransformationState = TransformationState(),
 	navigation: @Composable () -> Unit = {},
+	onDismissScreen: () -> Unit = {},
 ) {
 	val snackBarHostProvider = LocalSnackBarProvider.current
 	val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior()
+
+	val isBackHandlerEnabled by rememberSaveable(undoRedoState.holdHistory) {
+		mutableStateOf(undoRedoState.holdHistory)
+	}
+	var showDialog by remember { mutableStateOf(false) }
 
 	var showSheet by remember { mutableStateOf(false) }
 	val bottomSheetState = rememberModalBottomSheetState()
@@ -95,6 +105,15 @@ internal fun AudioEditorScreen(
 		onEvent = onEvent,
 		bottomSheetState = bottomSheetState,
 		showSheet = showSheet
+	)
+
+	BackHandler(enabled = isBackHandlerEnabled, onBack = { showDialog = true })
+
+	EditorBackHandlerDialog(
+		showDialog = showDialog,
+		onConfirm = onDismissScreen,
+		onDismiss = { showDialog = false },
+		properties = DialogProperties(dismissOnClickOutside = false)
 	)
 
 	Scaffold(

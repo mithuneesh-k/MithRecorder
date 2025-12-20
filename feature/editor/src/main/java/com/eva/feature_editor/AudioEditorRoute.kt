@@ -107,6 +107,11 @@ fun NavGraphBuilder.audioEditorRoute(controller: NavController) =
 				isMediaEdited = isMediaEdited,
 				undoRedoState = undoRedoState,
 				transformationState = transformationState,
+				onDismissScreen = {
+					if (controller.previousBackStackEntry != null) {
+						controller.popBackStack()
+					}
+				},
 				navigation = {
 					if (controller.previousBackStackEntry != null) {
 						IconButton(onClick = dropUnlessResumed(block = controller::popBackStack)) {

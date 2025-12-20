@@ -269,4 +269,7 @@
   <string name="action_continue">Continue</string>
   <string name="onboarding_page_welcome_message">Welcome to %s</string>
   <string name="move_back_to_list">Go back to List</string>
+  <string name="action_exit">Exit</string>
+  <string name="editor_screen_exiting_warning_dialog_title">Cancel Edit</string>
+  <string name="editor_screen_exiting_warning_dialog_desc">Exiting the editor screen will cancel your ongoing editing</string>
 </resources>

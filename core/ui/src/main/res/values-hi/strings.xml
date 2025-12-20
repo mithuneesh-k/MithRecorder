@@ -236,4 +236,7 @@
   <string name="action_continue">जारी रखें</string>
   <string name="onboarding_page_welcome_message">%s में आपका स्वागत है</string>
   <string name="move_back_to_list">लिस्ट पर वापस जाएँ</string>
+  <string name="action_exit">बाहर निकलें</string>
+  <string name="editor_screen_exiting_warning_dialog_title">एडिट रद्द करें</string>
+  <string name="editor_screen_exiting_warning_dialog_desc">एडिटर स्क्रीन से बाहर निकलने पर आपकी चल रही एडिटिंग हट जाएगी</string>
 </resources>
