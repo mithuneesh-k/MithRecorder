@@ -8,5 +8,6 @@ android {
 }
 
 dependencies {
+	implementation(libs.androidx.media3.inspector)
 	implementation(project(":data:recordings"))
 }

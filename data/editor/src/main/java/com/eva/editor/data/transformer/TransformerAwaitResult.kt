@@ -83,7 +83,7 @@ internal suspend fun Transformer.awaitResults(
 @UnstableApi
 suspend fun Transformer.awaitResults(mediaItem: MediaItem, outputUri: String): String {
 	val editMediaItem = EditedMediaItem.Builder(mediaItem).build()
-	val sequence = EditedMediaItemSequence.Builder(editMediaItem).build()
+	val sequence = EditedMediaItemSequence.withAudioFrom(listOf(editMediaItem))
 	val composition = Composition.Builder(sequence).build()
 	return awaitResults(composition, outputUri)
 }

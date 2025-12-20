@@ -27,4 +27,6 @@ dependencies {
 	implementation(project(":data:recordings"))
 	implementation(project(":data:interactions"))
 	implementation(project(":data:use_case"))
+
+	testImplementation(libs.mockk)
 }
