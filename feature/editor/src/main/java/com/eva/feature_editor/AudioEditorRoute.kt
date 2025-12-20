@@ -86,6 +86,15 @@ fun NavGraphBuilder.audioEditorRoute(controller: NavController) =
 			}
 		}
 
+		LaunchedEffect(lifecycleOwner) {
+			lifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+				editorViewModel.clipConfigs.collectLatest {
+					// when clip configs are updated the compressed visuals also get updated
+					visualsViewmodel.updateClipConfigs(it)
+				}
+			}
+		}
+
 		CompositionLocalProvider(LocalSharedTransitionVisibilityScopeProvider provides this) {
 			AudioEditorScreen(
 				loadState = loadState,

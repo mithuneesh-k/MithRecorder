@@ -1,7 +1,9 @@
 package com.eva.player.data.player
 
 import android.util.Log
+import androidx.annotation.OptIn
 import androidx.media3.common.Player
+import androidx.media3.common.util.UnstableApi
 import com.eva.player.data.util.computeIsPlayerPlaying
 import com.eva.player.data.util.computePlayerTrackData
 import com.eva.player.data.util.toMediaItem
@@ -55,14 +57,14 @@ internal class AudioFilePlayerImpl(private val player: Player) : AudioFilePlayer
 		player.repeatMode = repeatMode
 	}
 
+	@OptIn(UnstableApi::class)
 	override fun onMuteDevice() {
 		val command = player.isCommandAvailable(Player.COMMAND_SET_VOLUME)
 		if (!command) {
 			Log.w(LOGGER, "PLAYER COMMAND NOT FOUND")
 			return
 		}
-		val isStreamMuted = player.volume == 0f
-		player.volume = if (isStreamMuted) 1f else 0f
+		if (player.volume == .0f) player.unmute() else player.mute()
 	}
 
 	override suspend fun preparePlayer(audio: AudioFileModel): Result<Boolean> {
