@@ -10,6 +10,8 @@ import android.graphics.Typeface
 import android.os.SystemClock
 import android.util.Log
 import android.util.TypedValue
+import android.view.GestureDetector
+import android.view.MotionEvent
 import android.view.TextureView
 import androidx.core.content.res.ResourcesCompat
 import androidx.core.graphics.createBitmap
@@ -68,9 +70,24 @@ internal class PlayerAmplitudeGraph2View(context: Context) : TextureView(context
 	var textTypeface: Typeface = Typeface.MONOSPACE
 	var textFontSizeAsPx: Float = 12f
 
+	// resources
 	private val _bookMarkDrawable by lazy {
 		ResourcesCompat.getDrawable(resources, R.drawable.ic_bookmark, null)
 	}
+
+	//callbacks
+	private var _onPlayPosChangeViaScrollStart: ((Float) -> Unit)? = null
+	private var _onPlayPosChangeViaScroll: ((Float) -> Unit)? = null
+	private var _onPlayPosChangeViaScrollStop: (() -> Unit)? = null
+
+	private val _gestureDetectorListener = GraphScrollListener(
+		totalContentWidthProvider = { _timelineCacheBitmap?.width?.toFloat() ?: 0f },
+		onScrollStart = { _onPlayPosChangeViaScrollStart?.invoke(it) },
+		onScrollEnd = { _onPlayPosChangeViaScrollStop?.invoke() },
+		onScroll = { ratio -> _onPlayPosChangeViaScroll?.invoke(ratio) }
+	)
+
+	private val _gestureDetector by lazy { GestureDetector(context, _gestureDetectorListener) }
 
 	init {
 		surfaceTextureListener = this
@@ -103,6 +120,17 @@ internal class PlayerAmplitudeGraph2View(context: Context) : TextureView(context
 
 	override fun onSurfaceTextureUpdated(surface: SurfaceTexture) {
 		Log.i(TAG, "SURFACE TEXTURE UPDATED")
+	}
+
+	override fun onTouchEvent(event: MotionEvent): Boolean {
+		parent?.requestDisallowInterceptTouchEvent(true)
+		val handleEvents = _gestureDetector.onTouchEvent(event)
+		when (event.actionMasked) {
+			MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> _gestureDetectorListener.markScrollEnd()
+			MotionEvent.ACTION_DOWN -> _gestureDetectorListener.markScrollStarted(event.x)
+		}
+		// cancel touch events for the parent
+		return handleEvents || super.onTouchEvent(event)
 	}
 
 	private fun initiateCacheBitmaps(width: Int, height: Int) {
@@ -317,6 +345,10 @@ internal class PlayerAmplitudeGraph2View(context: Context) : TextureView(context
 
 	fun onUpdatePlayRatio(ratio: () -> Float) {
 		_playRatio = ratio()
+	}
+
+	fun onScrollToChangePlayPosition(listener: (Float) -> Unit) {
+		_onPlayPosChangeViaScroll = listener
 	}
 
 	fun cleanUp() {
