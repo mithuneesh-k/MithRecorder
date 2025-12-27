@@ -3,13 +3,11 @@ package com.eva.feature_player.views
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
-import android.graphics.PointF
 import android.graphics.Typeface
 import android.graphics.drawable.Drawable
 import android.text.TextPaint
 import androidx.core.graphics.withTranslation
 import java.util.Locale
-import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 
 fun Canvas.drawGraph(
@@ -23,10 +21,11 @@ fun Canvas.drawGraph(
 	bottomPadding: Int = 0,
 	leftPadding: Int = 0,
 ) {
-	val centerYAxis = (height - topPadding - bottomPadding) * 0.5f
+	val totalVPadding = topPadding + bottomPadding
+	val centerYAxis = (height - totalVPadding) * 0.5f
 	val paint = Paint().apply {
 		this.color = color
-		strokeWidth = spikesGap
+		this.strokeWidth = spikesGap
 		strokeCap = Paint.Cap.ROUND
 		isAntiAlias = true
 	}
@@ -39,110 +38,20 @@ fun Canvas.drawGraph(
 		val endY = centerYAxis * (1 + sizeFactor)
 
 		if (startY != endY) {
-			drawLine(xAxis, topPadding + startY, xAxis, topPadding + endY, paint)
+			drawLine(
+				xAxis,
+				totalVPadding * .5f + startY,
+				xAxis,
+				totalVPadding * .5f + endY,
+				paint
+			)
 		} else if (drawPoints) {
-			drawCircle(xAxis, topPadding + centerYAxis, spikesGap / 2f, paint)
-		}
-	}
-}
-
-fun Canvas.drawGraphCompressed(
-	waves: FloatArray,
-	color: Int,
-	drawPoints: Boolean = true,
-	spikesWidth: Float = 2f,
-	viewWidth: Int,
-	viewHeight: Int
-) {
-	val centerYAxis = viewHeight / 2f
-	val wavesSize = waves.size
-
-	if (wavesSize == 0) return
-
-	val spacing = viewWidth.toFloat() / (wavesSize + 1)
-	val pointsList = mutableListOf<PointF>()
-
-	val paint = Paint().apply {
-		this.color = color
-		strokeWidth = spikesWidth
-		strokeCap = Paint.Cap.ROUND
-		isAntiAlias = true
-	}
-
-	waves.forEachIndexed { index, wave ->
-		val xAxis = (index + 1) * spacing
-		val sizeFactor = wave * 0.8f
-		val startY = centerYAxis * (1 - sizeFactor)
-		val endY = centerYAxis * (1 + sizeFactor)
-
-		if (startY != endY) {
-			drawLine(xAxis, startY, xAxis, endY, paint)
-		} else if (drawPoints) {
-			pointsList.add(PointF(xAxis, endY))
-		}
-	}
-
-	if (drawPoints && pointsList.isNotEmpty()) {
-		pointsList.forEach { point ->
-			drawCircle(point.x, point.y, spikesWidth / 2f, paint)
-		}
-	}
-}
-
-fun Canvas.drawTimeLineCompressed(
-	totalDuration: Duration,
-	sampleSize: Int = 100,
-	outlineColor: Int,
-	outlineVariant: Int,
-	strokeWidthThick: Float = 2f,
-	strokeWidthLight: Float = 1f,
-	textColor: Int,
-	textSize: Float,
-	viewWidth: Int,
-	viewHeight: Int,
-	dpToPx: (Float) -> Float
-) {
-	val blockTime = totalDuration.inWholeMilliseconds / sampleSize
-	val spacing = viewWidth.toFloat() / sampleSize
-
-	val paintThick = Paint().apply {
-		color = outlineColor
-		strokeWidth = strokeWidthThick
-		strokeCap = Paint.Cap.ROUND
-		isAntiAlias = true
-	}
-
-	val paintLight = Paint().apply {
-		color = outlineVariant
-		strokeWidth = strokeWidthLight
-		strokeCap = Paint.Cap.ROUND
-		isAntiAlias = true
-	}
-
-	val textPaint = TextPaint().apply {
-		color = textColor
-		this.textSize = textSize
-		isAntiAlias = true
-		typeface = Typeface.MONOSPACE
-		textAlign = Paint.Align.CENTER
-	}
-
-	repeat(sampleSize + 20) { idx ->
-		val xAxis = idx * spacing
-		if (idx % 20 == 0) {
-			val time = (blockTime * idx).milliseconds
-			val minutes = time.inWholeMinutes
-			val seconds = (time.inWholeSeconds % 60)
-			val readable = String.format(Locale.ENGLISH, "%02d:%02d", minutes, seconds)
-
-			val textY = dpToPx(12f)
-			drawText(readable, xAxis, textY, textPaint)
-
-			drawLine(xAxis, 0f, xAxis, dpToPx(8f), paintThick)
-			drawLine(xAxis, viewHeight - dpToPx(8f), xAxis, viewHeight.toFloat(), paintThick)
-		} else if (idx % 5 == 0) {
-			drawLine(xAxis, 0f, xAxis, dpToPx(4f), paintLight)
-			drawLine(xAxis, viewHeight - dpToPx(4f), xAxis, viewHeight.toFloat(), paintLight)
+			drawCircle(
+				xAxis,
+				totalVPadding * .5f + centerYAxis,
+				spikesGap / 2f,
+				paint
+			)
 		}
 	}
 }
@@ -196,7 +105,7 @@ fun Canvas.drawTimeLine(
 			val seconds = (time.inWholeSeconds % 60)
 			val readable = String.format(Locale.getDefault(), "%02d:%02d", minutes, seconds)
 
-			val textY = dpToPx(12f).unaryMinus() - (textPaint.descent() + textPaint.ascent()) / 2
+			val textY = dpToPx(8f).unaryMinus() - (textPaint.descent() + textPaint.ascent()) / 2
 			drawText(readable, xAxis, topPadding + textY, textPaint)
 
 			drawLine(xAxis, topPadding.toFloat(), xAxis, topPadding + dpToPx(8f), paintThick)

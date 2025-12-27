@@ -58,18 +58,18 @@ internal class GraphScrollListener(
 		}
 
 		// Calculate delta time in seconds
-		val dt = (frameTimeNanos - _lastFrameTimeNanos) / 1_000_000_000f
+		val dTInSec = (frameTimeNanos - _lastFrameTimeNanos) / 1_000_000_000f
 		_lastFrameTimeNanos = frameTimeNanos
 
 		// Update scroll position
 		val previousRatio = _scrollRatioInternal
-		_scrollRatioInternal = (previousRatio + _flingVelocity * dt).coerceIn(0f, 1f)
+		_scrollRatioInternal = (previousRatio + _flingVelocity * dTInSec).coerceIn(0f, 1f)
 
 		onScroll(_scrollRatioInternal)
 		_flingVelocity *= 0.98f
 
 		// slow down the fling velocity until it's too slow
-		if (abs(_flingVelocity) < 0.005f || hitBoundary) {
+		if (abs(_flingVelocity) < 0.01f || hitBoundary) {
 			stopFling()
 			return
 		}
@@ -103,11 +103,15 @@ internal class GraphScrollListener(
 		Log.d(TAG, "FLING STOPPED")
 		// stop the frame callback
 		Choreographer.getInstance().removeFrameCallback(this)
+		// now call scroll end
+		onScrollEnd()
 	}
 
 	fun markScrollEnd() {
 		_isScrolling = false
 		Log.d(TAG, "SCROLL ENDED")
+		// don't call scroll end if flinging is on
+		if (_isFlinging) return
 		onScrollEnd()
 	}
 

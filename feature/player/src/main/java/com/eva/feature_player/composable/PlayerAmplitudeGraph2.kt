@@ -41,6 +41,9 @@ fun PlayerAmplitudeGraph2(
 	trackPlayRatio: PlayRatio,
 	graphData: PlayerGraphData,
 	modifier: Modifier = Modifier,
+	isSwipeToScrollEnabled: Boolean = false,
+	onSwipe: (ratio: Float) -> Unit = {},
+	onSwipeEnd: () -> Unit = {},
 	bookMarkTimeStamps: ImmutableList<LocalTime> = persistentListOf(),
 	plotColor: Color = MaterialTheme.colorScheme.secondary,
 	trackPointerColor: Color = MaterialTheme.colorScheme.primary,
@@ -87,16 +90,21 @@ fun PlayerAmplitudeGraph2(
 						contentPadding.calculateBottomPadding().roundToPx(),
 					)
 				}
+				view.isSwipeToScrollEnabled = isSwipeToScrollEnabled
+				// callbacks
+				view.onSwipeToChangeEnd(onSwipeEnd)
+				view.onSwipeToChangePlayPosition(onSwipe)
 			}
 		},
 		update = { view ->
+			// enable gesture detection
+			view.isSwipeToScrollEnabled = isSwipeToScrollEnabled
 			view.onUpdateTrackDuration(totalTrackDuration)
 			view.onUpdateBookMarks(bookMarkTimeStamps)
 			view.onUpdatePlotColor(plotColor.toArgb())
 			view.onUpdatePlayRatio { trackPlayRatio() }
 			view.onUpdateGraphData { graphData() }
 		},
-		onReset = { view -> view.cleanUp() },
 		onRelease = { view -> view.cleanUp() },
 		modifier = modifier.defaultMinSize(minHeight = dimensionResource(id = R.dimen.line_graph_min_height))
 	)
@@ -117,6 +125,9 @@ internal fun PlayerAmplitudeGraph2(
 	timelineTextColor: Color = MaterialTheme.colorScheme.onSurfaceVariant,
 	containerColor: Color = MaterialTheme.colorScheme.surfaceContainerHigh,
 	timelineFontFamily: FontFamily = FontFamily.Monospace,
+	isSwipeToScrollEnabled: Boolean = false,
+	onSeek: (Duration) -> Unit = {},
+	onSeekEnd: () -> Unit = {},
 	shape: Shape = MaterialTheme.shapes.small,
 	contentPadding: PaddingValues = PaddingValues(
 		horizontal = dimensionResource(id = R.dimen.graph_card_padding),
@@ -135,6 +146,12 @@ internal fun PlayerAmplitudeGraph2(
 			totalTrackDuration = totalDuration,
 			graphData = graphData,
 			bookMarkTimeStamps = bookMarksTimeStamps,
+			isSwipeToScrollEnabled = isSwipeToScrollEnabled,
+			onSwipe = { ratio ->
+				val duration = trackData().calculateSeekAmount(ratio)
+				onSeek(duration)
+			},
+			onSwipeEnd = onSeekEnd,
 			plotColor = plotColor,
 			trackPointerColor = trackPointerColor,
 			bookMarkColor = bookMarkColor,

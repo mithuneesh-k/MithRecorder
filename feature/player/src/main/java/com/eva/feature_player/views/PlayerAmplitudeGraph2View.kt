@@ -26,6 +26,7 @@ import kotlin.math.roundToInt
 import kotlin.time.Duration
 
 private const val TAG = "PLAYER_AMPLITUDE_GRAPH_2"
+private const val TEXTURE_VIEW_TAG = "PLAYER_TEXTURE_LISTENER"
 
 @OptIn(ExperimentalAtomicApi::class)
 internal class PlayerAmplitudeGraph2View(context: Context) : TextureView(context),
@@ -75,15 +76,14 @@ internal class PlayerAmplitudeGraph2View(context: Context) : TextureView(context
 		ResourcesCompat.getDrawable(resources, R.drawable.ic_bookmark, null)
 	}
 
-	//callbacks
-	private var _onPlayPosChangeViaScrollStart: ((Float) -> Unit)? = null
+	// swipe to scroll
+	var isSwipeToScrollEnabled = false
 	private var _onPlayPosChangeViaScroll: ((Float) -> Unit)? = null
-	private var _onPlayPosChangeViaScrollStop: (() -> Unit)? = null
+	private var _onPlayPosChangeViaScrollEnd: (() -> Unit)? = null
 
 	private val _gestureDetectorListener = GraphScrollListener(
 		totalContentWidthProvider = { _timelineCacheBitmap?.width?.toFloat() ?: 0f },
-		onScrollStart = { _onPlayPosChangeViaScrollStart?.invoke(it) },
-		onScrollEnd = { _onPlayPosChangeViaScrollStop?.invoke() },
+		onScrollEnd = { _onPlayPosChangeViaScrollEnd?.invoke() },
 		onScroll = { ratio -> _onPlayPosChangeViaScroll?.invoke(ratio) }
 	)
 
@@ -92,13 +92,20 @@ internal class PlayerAmplitudeGraph2View(context: Context) : TextureView(context
 	init {
 		surfaceTextureListener = this
 		isOpaque = true
+		isClickable = true
 	}
 
 	override fun onSurfaceTextureAvailable(surface: SurfaceTexture, width: Int, height: Int) {
-		_renderThread = Thread(renderLoop(), "RENDERER_THREAD_")
+		_renderThread = Thread(renderLoop(), "thGraphRenderer_")
 		_renderThread?.start()
-		Log.i(TAG, "RENDERER THREAD IS ACTIVE")
+		Log.d(TEXTURE_VIEW_TAG, "RENDERER THREAD IS ACTIVE")
 		_isThRunning = true
+
+		// init bitmap cache from the given width and height
+		if (_graphCacheBitmap == null || _timelineCacheBitmap == null) {
+			Log.d(TEXTURE_VIEW_TAG, "RE-INITIATE CACHED BITMAPS")
+			initiateCacheBitmaps(width, height)
+		}
 	}
 
 	override fun onSurfaceTextureDestroyed(surface: SurfaceTexture): Boolean {
@@ -106,25 +113,28 @@ internal class PlayerAmplitudeGraph2View(context: Context) : TextureView(context
 			_isThRunning = false
 			_renderThread?.join(1000)
 		} catch (e: Exception) {
-			Log.e(TAG, "THREAD CLEANUP", e)
+			Log.e(TEXTURE_VIEW_TAG, "THREAD CLEANUP", e)
 		}
-		Log.i(TAG, "RENDERER THREAD IS CLEANED! ${_renderThread?.state}")
+		Log.d(TEXTURE_VIEW_TAG, "RENDERER THREAD IS CLEANED! ${_renderThread?.state}")
+		// surface view is released
 		return true
 	}
 
 	override fun onSurfaceTextureSizeChanged(surface: SurfaceTexture, width: Int, height: Int) {
-		if (width <= 0 || height <= 0) return
+		Log.d(TEXTURE_VIEW_TAG, "SURFACE TEXTURE SIZE CHANGED")
+		// reinitiate bitmap cache as texture size changed
 		initiateCacheBitmaps(width, height)
-		Log.i(TAG, "SURFACE TEXTURE SIZE CHANGED")
 	}
 
-	override fun onSurfaceTextureUpdated(surface: SurfaceTexture) {
-		Log.i(TAG, "SURFACE TEXTURE UPDATED")
-	}
+	override fun onSurfaceTextureUpdated(surface: SurfaceTexture) = Unit
+
 
 	override fun onTouchEvent(event: MotionEvent): Boolean {
+		if (!isSwipeToScrollEnabled) return super.onTouchEvent(event)
+		// if swipe to scroll enabled then only allow the gesture detection
 		parent?.requestDisallowInterceptTouchEvent(true)
 		val handleEvents = _gestureDetector.onTouchEvent(event)
+		if (event.action == MotionEvent.ACTION_UP) performClick()
 		when (event.actionMasked) {
 			MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> _gestureDetectorListener.markScrollEnd()
 			MotionEvent.ACTION_DOWN -> _gestureDetectorListener.markScrollStarted(event.x)
@@ -133,31 +143,48 @@ internal class PlayerAmplitudeGraph2View(context: Context) : TextureView(context
 		return handleEvents || super.onTouchEvent(event)
 	}
 
-	private fun initiateCacheBitmaps(width: Int, height: Int) {
-		// recycle and clear the old bitmap
-		_timelineCacheBitmap?.recycle()
-		_graphCacheBitmap?.recycle()
-		_timelineCacheBitmap = null
-		_graphCacheBitmap = null
+	private fun initiateCacheBitmaps(
+		width: Int,
+		height: Int,
+		resetTimelineCache: Boolean = true,
+		resetGraphCache: Boolean = true
+	) {
+		if (width <= 0 || height <= 0) {
+			Log.w(TAG, "INVALID AREA")
+			return
+		}
 
+		// evaluate the sizes
 		val maxSamples = RecorderConstants.RECORDER_AMPLITUDES_BUFFER_SIZE
 		val spikesWidth = width.toFloat() / RecorderConstants.RECORDER_AMPLITUDES_BUFFER_SIZE
-		val spikeSpace = dpToPx(2f)
+		val spikeSpace = (spikesWidth - dpToPx(1.5f)).let { amt ->
+			if (amt > 0f) amt else dpToPx(2.0f)
+		}
 		val blockWidth = spikesWidth + spikeSpace
 
 		val probableSampleSize = maxOf(_totalTrackDurationMillis / maxSamples, 10L)
 		val maxWidth = (probableSampleSize * blockWidth + paddingLeft).roundToInt()
 			.coerceAtLeast(width * 2)
 
-		// build a timeline based on the probable size
-		_timelineCacheBitmap = createBitmap(maxWidth, height)
-		_timelineCacheCanvas = Canvas(_timelineCacheBitmap!!)
-		_timelineCached.store(false)
+		if (resetTimelineCache) {
+			// recycle and clear the old bitmap
+			_timelineCacheBitmap?.recycle()
+			_timelineCacheBitmap = null
+			// build a timeline based on the probable size
+			_timelineCacheBitmap = createBitmap(maxWidth, height)
+			_timelineCacheCanvas = Canvas(_timelineCacheBitmap!!)
+			_timelineCached.store(false)
+		}
 
-		// build an arbitrary graph cache based on the probable size
-		_graphCacheBitmap = createBitmap(maxWidth, height)
-		_graphCacheCanvas = Canvas(_graphCacheBitmap!!)
-		_cachedGraphDataSize = 0
+		if (resetGraphCache) {
+			// clear the graph if any
+			_graphCacheBitmap?.recycle()
+			_graphCacheBitmap = null
+			// build an arbitrary graph cache based on the probable size
+			_graphCacheBitmap = createBitmap(maxWidth, height)
+			_graphCacheCanvas = Canvas(_graphCacheBitmap!!)
+			_cachedGraphDataSize = 0
+		}
 
 		Log.d(TAG, "CREATING TIMELINE AND GRAPH OF SIZE: ${maxWidth}x${height}")
 	}
@@ -195,13 +222,12 @@ internal class PlayerAmplitudeGraph2View(context: Context) : TextureView(context
 		drawColor(canvasBackground)
 
 		val spikesWidth = width.toFloat() / RecorderConstants.RECORDER_AMPLITUDES_BUFFER_SIZE
-		val spikeSpace = dpToPx(2f)
+		val spikeGap = (spikesWidth - dpToPx(1.5f)).let { amt ->
+			if (amt > 0f) amt else dpToPx(2.0f)
+		}
 
-		val probableSampleSize = maxOf(
-			_totalTrackDurationMillis / RecorderConstants.RECORDER_AMPLITUDES_BUFFER_SIZE,
-			100L
-		)
-
+		val probableSampleSize =
+			_totalTrackDurationMillis / RecorderConstants.RECORDER_AMPLITUDES_BUFFER_SIZE
 		val sampleSize = maxOf(_graphData.size.toLong(), probableSampleSize)
 		val totalSize = sampleSize * spikesWidth
 		val translate = (width * 0.5f - paddingLeft) - (totalSize * _playRatio)
@@ -226,12 +252,11 @@ internal class PlayerAmplitudeGraph2View(context: Context) : TextureView(context
 				bottomPadding = paddingBottom,
 				leftPadding = paddingLeft
 			)
+			Log.d(TAG, "ONE TIME TIMELINE DRAWING DONE!!")
 			_timelineCached.store(true)
-			Log.d(TAG, "ONE TIME TIMELINE DRAW DONE!!")
 		}
 
 		// Draw cached timeline
-
 		withTranslation(x = translate) {
 			_timelineCacheBitmap?.let { bitmap ->
 				if (bitmap.isRecycled) return@withTranslation
@@ -242,8 +267,6 @@ internal class PlayerAmplitudeGraph2View(context: Context) : TextureView(context
 		val currentDataSize = _graphData.size
 		val cachedSize = _cachedGraphDataSize
 		if (currentDataSize > cachedSize) {
-			Log.d(TAG, "DRAWING FROM  $cachedSize TO $currentDataSize")
-
 			// Extract only the new data
 			val newData = _graphData.sliceArray(cachedSize..<currentDataSize)
 
@@ -251,7 +274,7 @@ internal class PlayerAmplitudeGraph2View(context: Context) : TextureView(context
 			_graphCacheCanvas?.drawGraph(
 				waves = newData,
 				startIdx = cachedSize,
-				spikesGap = spikeSpace,
+				spikesGap = spikeGap,
 				spikesWidth = spikesWidth,
 				color = plotColor,
 				topPadding = paddingTop,
@@ -290,17 +313,24 @@ internal class PlayerAmplitudeGraph2View(context: Context) : TextureView(context
 	private fun dpToPx(dp: Float): Float =
 		TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, dp, resources.displayMetrics)
 
+
 	private fun invalidateTimeline() {
 		_timelineCached.store(false)
 		_isDataAvailable = true
-		Log.d(TAG, "TIMELINE CACHE INVALIDATED")
+
+		// invalidate the timeline
+		initiateCacheBitmaps(width, height, resetGraphCache = false)
+		Log.i(TAG, "REDRAWING TIMELINE")
 	}
 
 	private fun resetGraphCache() {
 		_graphCacheCanvas?.drawColor(Color.TRANSPARENT, PorterDuff.Mode.CLEAR)
 		_cachedGraphDataSize = 0
 		_isDataAvailable = true
-		Log.d(TAG, "GRAPH RESET")
+
+		// invalidate the graph
+		initiateCacheBitmaps(width, height, resetTimelineCache = false)
+		Log.i(TAG, "REDRAWING GRAPH")
 	}
 
 	fun onUpdateTrackDuration(duration: Duration) {
@@ -312,8 +342,6 @@ internal class PlayerAmplitudeGraph2View(context: Context) : TextureView(context
 		// invalidate the timeline cache
 		invalidateTimeline()
 		Log.d(TAG, "TRACK DURATION UPDATED")
-
-		if (width > 0 && height > 0) initiateCacheBitmaps(width, height)
 	}
 
 	fun onUpdateBookMarks(bookMarks: List<LocalTime>) {
@@ -347,8 +375,12 @@ internal class PlayerAmplitudeGraph2View(context: Context) : TextureView(context
 		_playRatio = ratio()
 	}
 
-	fun onScrollToChangePlayPosition(listener: (Float) -> Unit) {
-		_onPlayPosChangeViaScroll = listener
+	fun onSwipeToChangeEnd(onScrollEndListener: () -> Unit) {
+		_onPlayPosChangeViaScrollEnd = onScrollEndListener
+	}
+
+	fun onSwipeToChangePlayPosition(onScrollListener: (Float) -> Unit) {
+		_onPlayPosChangeViaScroll = onScrollListener
 	}
 
 	fun cleanUp() {
@@ -361,6 +393,11 @@ internal class PlayerAmplitudeGraph2View(context: Context) : TextureView(context
 		_timelineCacheBitmap = null
 		_graphCacheBitmap?.recycle()
 		_graphCacheBitmap = null
-		Log.i(TAG, "CLEANUP CODE CALLED")
+		Log.d(TEXTURE_VIEW_TAG, "CLEANUP CODE CALLED")
+
+		//clear callbacks
+		_onPlayPosChangeViaScrollEnd = null
+		_onPlayPosChangeViaScroll = null
+		Log.d(TAG, "CALLBACKS REMOVED")
 	}
 }
