@@ -1,16 +1,18 @@
 package com.com.visualizer.data
 
-import android.content.Context
 import android.media.MediaCodec
 import android.media.MediaCodecList
-import android.media.MediaExtractor
 import android.media.MediaFormat
 import android.net.Uri
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
-import com.com.visualizer.domain.exception.ExtractorNoTrackFoundException
+import androidx.media3.common.util.UnstableApi
+import androidx.media3.datasource.DataSource
+import androidx.media3.extractor.ExtractorsFactory
+import androidx.media3.inspector.MediaExtractorCompat
 import com.com.visualizer.domain.exception.InvalidMimeTypeException
+import com.com.visualizer.domain.exception.MediaExtractorException
 import com.com.visualizer.utils.isThreadAlive
 import com.com.visualizer.utils.safePOST
 import kotlinx.coroutines.CancellationException
@@ -39,6 +41,7 @@ private const val CODEC_TAG = "CODEC_CALLBACK"
 private const val PROCESSING_TAG = "CODEC_PROCESSING"
 private const val EXTRACTOR_TAG = "MEDIA_EXTRACTOR"
 
+@UnstableApi
 @OptIn(ExperimentalAtomicApi::class)
 internal class MediaCodecPCMDataDecoder(
 	private val seekDurationMillis: Int,
@@ -51,7 +54,7 @@ internal class MediaCodecPCMDataDecoder(
 	private var _mediaCodec: MediaCodec? = null
 
 	@Volatile
-	private var _extractor: MediaExtractor? = null
+	private var _extractor: MediaExtractorCompat? = null
 
 	@Volatile
 	private var _codecState = MediaCodecState.RELEASED
@@ -111,7 +114,10 @@ internal class MediaCodecPCMDataDecoder(
 				return
 			}
 			// seek the extractor as we don't need extra data
-			extractor.seekTo(_currentTimeInMs.load() * 1_000L, MediaExtractor.SEEK_TO_CLOSEST_SYNC)
+			extractor.seekTo(
+				_currentTimeInMs.load() * 1_000L,
+				MediaExtractorCompat.SEEK_TO_CLOSEST_SYNC
+			)
 			val sampleSize = extractor.readSampleData(inputBuffer, 0)
 
 			// sample size is zero thus processing done END_OF_STREAM
@@ -191,7 +197,10 @@ internal class MediaCodecPCMDataDecoder(
 	}
 
 	override fun onOutputFormatChanged(codec: MediaCodec, format: MediaFormat) {
-		Log.d(CODEC_TAG, "MEDIA FORMAT CHANGED: $format")
+		if (format.keys.contains(MediaFormat.KEY_DURATION)) {
+			_totalTimeInMs.store(format.duration?.inWholeMilliseconds ?: 0L)
+		}
+		Log.d(CODEC_TAG, "MEDIA FORMAT CHANGED: KEYS:${format.keys}")
 	}
 
 	private fun handleFloatArray(pcm: FloatArray) {
@@ -269,27 +278,38 @@ internal class MediaCodecPCMDataDecoder(
 		_onDecodeComplete = listener
 	}
 
-	suspend fun initiateExtraction(context: Context, fileURI: Uri): Result<Unit> =
-		withContext(ioDispatcher) {
-			_extractor?.release()
-			_extractor = MediaExtractor().apply {
-				setDataSource(context, fileURI, null)
-			}
-			val format = _extractor?.getTrackFormat(0)
-			val mimeType = format?.mimeType
-
-			if (mimeType == null || !mimeType.startsWith("audio"))
-				return@withContext Result.failure(InvalidMimeTypeException())
-
-			if (_extractor?.trackCount == 0)
-				return@withContext Result.failure(ExtractorNoTrackFoundException())
-
-			Log.i(EXTRACTOR_TAG, "EXTRACTOR PREPARED")
-			_extractor?.selectTrack(0)
-			_totalTimeInMs.store(format.duration.inWholeMilliseconds)
-			initiateCodec(format)
-			Result.success(Unit)
+	suspend fun initiateExtraction(
+		extractor: ExtractorsFactory,
+		dataSource: DataSource.Factory,
+		fileURI: Uri
+	): Result<Unit> = withContext(ioDispatcher) {
+		_extractor?.release()
+		_extractor = MediaExtractorCompat(extractor, dataSource).apply {
+			setDataSource(fileURI, 0)
 		}
+		// check track count
+		if (_extractor?.trackCount == 0)
+			return@withContext Result.failure(MediaExtractorException("No track found"))
+
+		val format = _extractor!!.getTrackFormat(0)
+		val mimeType = format.mimeType
+
+		// check audio duration
+		if (!format.keys.contains(MediaFormat.KEY_DURATION))
+			return@withContext Result.failure(MediaExtractorException("Cannot determine track duration"))
+
+		// check mime type
+		if (mimeType == null || !mimeType.startsWith("audio"))
+			return@withContext Result.failure(InvalidMimeTypeException())
+
+		// set the total time
+		_totalTimeInMs.store(format.duration?.inWholeMilliseconds ?: 0L)
+
+		Log.i(EXTRACTOR_TAG, "EXTRACTOR PREPARED")
+		_extractor?.selectTrack(0)
+		initiateCodec(format)
+		Result.success(Unit)
+	}
 
 
 	private fun initiateCodec(format: MediaFormat) {

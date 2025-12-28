@@ -4,8 +4,8 @@ import android.content.Context
 import androidx.concurrent.futures.await
 import androidx.media3.common.MediaItem
 import androidx.media3.common.util.UnstableApi
-import androidx.media3.exoplayer.MetadataRetriever
 import androidx.media3.exoplayer.source.MediaSource
+import androidx.media3.inspector.MetadataRetriever
 import com.eva.player.domain.AudioMetadataRetriever
 import com.eva.recordings.domain.models.AudioFileModel
 import kotlin.time.Duration

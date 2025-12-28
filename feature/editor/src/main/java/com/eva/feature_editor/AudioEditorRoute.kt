@@ -86,6 +86,15 @@ fun NavGraphBuilder.audioEditorRoute(controller: NavController) =
 			}
 		}
 
+		LaunchedEffect(lifecycleOwner) {
+			lifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+				editorViewModel.clipConfigs.collectLatest {
+					// when clip configs are updated the compressed visuals also get updated
+					visualsViewmodel.updateClipConfigs(it)
+				}
+			}
+		}
+
 		CompositionLocalProvider(LocalSharedTransitionVisibilityScopeProvider provides this) {
 			AudioEditorScreen(
 				loadState = loadState,
@@ -98,6 +107,11 @@ fun NavGraphBuilder.audioEditorRoute(controller: NavController) =
 				isMediaEdited = isMediaEdited,
 				undoRedoState = undoRedoState,
 				transformationState = transformationState,
+				onDismissScreen = {
+					if (controller.previousBackStackEntry != null) {
+						controller.popBackStack()
+					}
+				},
 				navigation = {
 					if (controller.previousBackStackEntry != null) {
 						IconButton(onClick = dropUnlessResumed(block = controller::popBackStack)) {

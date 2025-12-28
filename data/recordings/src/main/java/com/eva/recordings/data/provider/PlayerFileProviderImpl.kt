@@ -5,31 +5,21 @@ import android.content.ContentUris
 import android.content.Context
 import android.database.ContentObserver
 import android.database.Cursor
-import android.media.MediaExtractor
-import android.media.MediaFormat
-import android.media.MediaMetadataRetriever
-import android.net.Uri
-import android.os.Build
 import android.provider.MediaStore
 import android.util.Log
-import androidx.core.net.toUri
 import androidx.core.os.bundleOf
-import com.eva.datastore.domain.repository.RecorderAudioSettingsRepo
-import com.eva.location.domain.repository.LocationAddressProvider
-import com.eva.location.domain.utils.parseLocationFromString
 import com.eva.recordings.BuildConfig
 import com.eva.recordings.data.utils.evaluateWithTimeRead
 import com.eva.recordings.data.wrapper.RecordingsConstants
 import com.eva.recordings.data.wrapper.RecordingsContentResolverWrapper
 import com.eva.recordings.domain.exceptions.InvalidAudioFileIdException
 import com.eva.recordings.domain.models.AudioFileModel
-import com.eva.recordings.domain.models.MediaMetaDataInfo
+import com.eva.recordings.domain.provider.AudioInfoExtractor
 import com.eva.recordings.domain.provider.PlayerFileProvider
 import com.eva.recordings.domain.provider.ResourcedDetailedRecordingModel
 import com.eva.utils.Resource
 import com.eva.utils.toLocalDateTime
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.async
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
@@ -41,9 +31,8 @@ import kotlin.time.Duration.Companion.seconds
 private const val TAG = "PLAYER_FILE_PROVIDER"
 
 internal class PlayerFileProviderImpl(
-	private val context: Context,
-	private val settings: RecorderAudioSettingsRepo,
-	private val addressProvider: LocationAddressProvider,
+	context: Context,
+	private val extractor: AudioInfoExtractor,
 ) : RecordingsContentResolverWrapper(context), PlayerFileProvider {
 
 	private val _projection: Array<String>
@@ -94,7 +83,7 @@ internal class PlayerFileProviderImpl(
 							readTime = BuildConfig.DEBUG
 						) {
 							if (!readMetaData) return@evaluateWithTimeRead null
-							extractMediaInfo(model.fileUri.toUri())
+							extractor.extractMediaData(model.fileUri)
 						}
 						val modelWithMetaData = model.copy(metaData = metaData)
 						// send data with metadata
@@ -159,7 +148,7 @@ internal class PlayerFileProviderImpl(
 						readTime = BuildConfig.DEBUG
 					) {
 						if (!readMetaData) return@use result
-						extractMediaInfo(result.fileUri.toUri())
+						extractor.extractMediaData(result.fileUri)
 					}
 					result.copy(metaData = metaData)
 				} ?: return@withContext Result.failure(InvalidAudioFileIdException())
@@ -167,50 +156,6 @@ internal class PlayerFileProviderImpl(
 		}
 	}
 
-
-	private suspend fun extractMediaInfo(uri: Uri): MediaMetaDataInfo? {
-		val extractor = MediaExtractor()
-		val retriever = MediaMetadataRetriever()
-		try {
-			return withContext(Dispatchers.IO) {// set source
-				extractor.setDataSource(context, uri, null)
-				retriever.setDataSource(context, uri)
-				// its accountable that there is a single track
-				val mediaFormat = extractor.getTrackFormat(0)
-				val channelCount = mediaFormat.getInteger(MediaFormat.KEY_CHANNEL_COUNT)
-
-				val sampleRate = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-					retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_SAMPLERATE)
-						?.toIntOrNull() ?: 0
-				} else mediaFormat.getInteger(MediaFormat.KEY_SAMPLE_RATE)
-
-				val locationAsString = async {
-					val audioSettings = settings.audioSettings()
-					if (!audioSettings.addLocationInfoInRecording) return@async null
-					val locationString =
-						retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_LOCATION)
-					parseLocationFromString(locationString)
-						?.let { addressProvider.invoke(it).getOrNull() }
-				}
-
-				val bitRate = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_BITRATE)
-					?.toIntOrNull() ?: 0
-
-				MediaMetaDataInfo(
-					channelCount = channelCount,
-					sampleRate = sampleRate,
-					bitRate = bitRate,
-					locationString = locationAsString.await()
-				)
-			}
-		} catch (e: Exception) {
-			e.printStackTrace()
-			return null
-		} finally {
-			retriever.release()
-			extractor.release()
-		}
-	}
 
 	private suspend fun evaluateValuesFromCursor(cursor: Cursor): AudioFileModel? {
 		return withContext(Dispatchers.IO) {
