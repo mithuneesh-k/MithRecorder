@@ -24,11 +24,15 @@ internal val MediaFormat.channels: Int
 internal val MediaFormat.sampleRate: Int
 	get() = getInteger(MediaFormat.KEY_SAMPLE_RATE)
 
-internal val MediaFormat.duration: Duration
-	get() = getLong(MediaFormat.KEY_DURATION).microseconds
+internal val MediaFormat.duration: Duration?
+	get() = if (containsKey(MediaFormat.KEY_DURATION))
+		getLong(MediaFormat.KEY_DURATION).microseconds
+	else null
 
 internal val MediaFormat.mimeType: String?
-	get() = getString(MediaFormat.KEY_MIME)
+	get() = if (containsKey(MediaFormat.KEY_MIME))
+		getString(MediaFormat.KEY_MIME)
+	else null
 
 internal val MediaCodec.BufferInfo.isEndOfStream: Boolean
 	get() = flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0

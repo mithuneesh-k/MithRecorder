@@ -2,6 +2,7 @@ package com.eva.editor.data.transformer
 
 import android.util.Log
 import androidx.annotation.OptIn
+import androidx.media3.common.C
 import androidx.media3.common.Effect
 import androidx.media3.common.MediaItem
 import androidx.media3.common.audio.AudioProcessor
@@ -62,13 +63,16 @@ internal fun AudioFileModel.toComposition(
 
 	Log.d(TAG, "CLIPPING :${ranges.joinToString("|")}")
 
-	val itemSequence = EditedMediaItemSequence.Builder().also { builder ->
-		editableItems.forEachIndexed { idx, item ->
-			builder.addItem(item)
-			if (gap > Duration.ZERO && idx + 1 < editableItems.size)
-				builder.addGap(gap.inWholeMicroseconds)
+	val itemSequence = EditedMediaItemSequence
+		.Builder(setOf(C.TRACK_TYPE_AUDIO))
+		.also { builder ->
+			editableItems.forEachIndexed { idx, item ->
+				builder.addItem(item)
+				if (gap > Duration.ZERO && idx + 1 < editableItems.size)
+					builder.addGap(gap.inWholeMicroseconds)
+			}
 		}
-	}.build()
+		.build()
 
 	return Composition.Builder(itemSequence)
 		.build()

@@ -111,15 +111,20 @@ class PlayerVisualizerViewmodel @Inject constructor(
 	}
 
 
-	private fun updatesOnConfigChange() {
-		combine(visualizer.normalizedVisualization, _clipConfigs) { visuals, configs ->
+	private fun updatesOnConfigChange() = combine(
+		visualizer.normalizedVisualization,
+		_clipConfigs
+	) { visuals, configs ->
+		try {
 			val newVisuals = visuals.updateArrayViaConfigs(
 				configs = configs,
 				timeInMillisPerBar = RecorderConstants.RECORDER_AMPLITUDES_BUFFER_SIZE
 			)
 			_compressedVisualization.update { newVisuals }
-		}.launchIn(viewModelScope)
-	}
+		} catch (_: IllegalStateException) {
+			_uiEvents.emit(UIEvents.ShowSnackBar("Cannot update visuals"))
+		}
+	}.launchIn(viewModelScope)
 
 	override fun onCleared() {
 		visualizer.cleanUp()

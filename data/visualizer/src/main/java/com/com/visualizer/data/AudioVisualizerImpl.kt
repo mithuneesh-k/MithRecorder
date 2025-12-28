@@ -2,8 +2,14 @@ package com.com.visualizer.data
 
 import android.content.Context
 import android.util.Log
+import androidx.annotation.OptIn
 import androidx.core.net.toUri
 import androidx.lifecycle.LifecycleOwner
+import androidx.media3.common.util.UnstableApi
+import androidx.media3.datasource.DataSource
+import androidx.media3.datasource.DefaultDataSource
+import androidx.media3.extractor.DefaultExtractorsFactory
+import androidx.media3.extractor.ExtractorsFactory
 import com.com.visualizer.domain.AudioVisualizer
 import com.com.visualizer.domain.ThreadController
 import com.com.visualizer.domain.VisualizerState
@@ -22,10 +28,18 @@ import kotlinx.coroutines.sync.withLock
 
 private const val TAG = "PLAIN_VISUALIZER"
 
+@OptIn(UnstableApi::class)
 internal class AudioVisualizerImpl(
-	private val context: Context,
+	private val extractor: ExtractorsFactory,
+	private val dataSource: DataSource.Factory,
 	private val threadHandler: ThreadController
 ) : AudioVisualizer {
+
+	constructor(context: Context, threadHandler: ThreadController) : this(
+		extractor = DefaultExtractorsFactory().setConstantBitrateSeekingEnabled(true),
+		dataSource = DefaultDataSource.Factory(context),
+		threadHandler = threadHandler
+	)
 
 	private var _decoder: MediaCodecPCMDataDecoder? = null
 	private val _lock = Mutex()
@@ -81,7 +95,7 @@ internal class AudioVisualizerImpl(
 				// decoder work is done so we can kill it now
 				if (handler != null) threadHandler.stopThread(handler)
 			}
-			decoder.initiateExtraction(context, fileUri.toUri())
+			decoder.initiateExtraction(extractor, dataSource, fileUri.toUri())
 		} catch (e: Exception) {
 			Log.e(TAG, "CANNOT DECODE THIS URI", e)
 			Result.failure(e)

@@ -236,4 +236,7 @@
   <string name="action_continue">শুরু করুন</string>
   <string name="onboarding_page_welcome_message">%s এ স্বাগত</string>
   <string name="move_back_to_list">লিস্টে ফিরে যান</string>
+  <string name="action_exit">বাতিল</string>
+  <string name="editor_screen_exiting_warning_dialog_title">এডিট বাতিল করুন</string>
+  <string name="editor_screen_exiting_warning_dialog_desc">এডিটর স্ক্রিন থেকে বেরিয়ে গেলে আপনার সম্পাদনা বাতিল হয়ে যাবে</string>
 </resources>
