@@ -20,6 +20,7 @@ import androidx.core.graphics.withTranslation
 import com.eva.ui.R
 import com.eva.utils.RecorderConstants
 import kotlinx.datetime.LocalTime
+import java.util.concurrent.CopyOnWriteArraySet
 import kotlin.concurrent.atomics.AtomicBoolean
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
 import kotlin.math.roundToInt
@@ -58,7 +59,7 @@ internal class PlayerAmplitudeGraph2View(context: Context) : TextureView(context
 	private var _graphData: FloatArray = floatArrayOf()
 	private var _totalTrackDurationMillis: Long = 0L
 	private var _playRatio: Float = 0f
-	private val _bookMarkTimeStamps = mutableSetOf<Int>()
+	private val _bookMarkTimeStamps = CopyOnWriteArraySet<Int>()
 
 	// colors and font
 	var plotColor: Int = Color.WHITE
@@ -82,9 +83,10 @@ internal class PlayerAmplitudeGraph2View(context: Context) : TextureView(context
 	private var _onPlayPosChangeViaScrollEnd: (() -> Unit)? = null
 
 	private val _gestureDetectorListener = GraphScrollListener(
+		flingEnabled = false,
 		totalContentWidthProvider = { _timelineCacheBitmap?.width?.toFloat() ?: 0f },
 		onScrollEnd = { _onPlayPosChangeViaScrollEnd?.invoke() },
-		onScroll = { ratio -> _onPlayPosChangeViaScroll?.invoke(ratio) }
+		onScroll = { ratio -> _onPlayPosChangeViaScroll?.invoke(ratio) },
 	)
 
 	private val _gestureDetector by lazy { GestureDetector(context, _gestureDetectorListener) }
@@ -128,6 +130,10 @@ internal class PlayerAmplitudeGraph2View(context: Context) : TextureView(context
 
 	override fun onSurfaceTextureUpdated(surface: SurfaceTexture) = Unit
 
+	override fun performClick(): Boolean {
+		super.performClick()
+		return true
+	}
 
 	override fun onTouchEvent(event: MotionEvent): Boolean {
 		if (!isSwipeToScrollEnabled) return super.onTouchEvent(event)
@@ -137,7 +143,10 @@ internal class PlayerAmplitudeGraph2View(context: Context) : TextureView(context
 		if (event.action == MotionEvent.ACTION_UP) performClick()
 		when (event.actionMasked) {
 			MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> _gestureDetectorListener.markScrollEnd()
-			MotionEvent.ACTION_DOWN -> _gestureDetectorListener.markScrollStarted(event.x)
+			MotionEvent.ACTION_DOWN -> _gestureDetectorListener.markScrollStarted(
+				event.x,
+				_playRatio
+			)
 		}
 		// cancel touch events for the parent
 		return handleEvents || super.onTouchEvent(event)
@@ -150,7 +159,7 @@ internal class PlayerAmplitudeGraph2View(context: Context) : TextureView(context
 		resetGraphCache: Boolean = true
 	) {
 		if (width <= 0 || height <= 0) {
-			Log.w(TAG, "INVALID AREA")
+			Log.w(TAG, "INVALID AREA | SIPPING UPDATE")
 			return
 		}
 
@@ -174,6 +183,9 @@ internal class PlayerAmplitudeGraph2View(context: Context) : TextureView(context
 			_timelineCacheBitmap = createBitmap(maxWidth, height)
 			_timelineCacheCanvas = Canvas(_timelineCacheBitmap!!)
 			_timelineCached.store(false)
+			_timelineCacheBitmap?.apply {
+				Log.d(TAG, "TIMELINE CONTENT INVALIDATED NEW SIZE :${width} $height")
+			}
 		}
 
 		if (resetGraphCache) {
@@ -184,9 +196,10 @@ internal class PlayerAmplitudeGraph2View(context: Context) : TextureView(context
 			_graphCacheBitmap = createBitmap(maxWidth, height)
 			_graphCacheCanvas = Canvas(_graphCacheBitmap!!)
 			_cachedGraphDataSize = 0
+			_graphCacheBitmap?.apply {
+				Log.d(TAG, "GRAPH CONTENT INVALIDATED NEW SIZE :${width} $height")
+			}
 		}
-
-		Log.d(TAG, "CREATING TIMELINE AND GRAPH OF SIZE: ${maxWidth}x${height}")
 	}
 
 	private fun renderLoop(frameTimeMs: Long = 33L) = Runnable {
@@ -252,7 +265,7 @@ internal class PlayerAmplitudeGraph2View(context: Context) : TextureView(context
 				bottomPadding = paddingBottom,
 				leftPadding = paddingLeft
 			)
-			Log.d(TAG, "ONE TIME TIMELINE DRAWING DONE!!")
+			Log.d(TAG, "TIME TIMELINE DRAWING DONE!!")
 			_timelineCached.store(true)
 		}
 
@@ -313,22 +326,29 @@ internal class PlayerAmplitudeGraph2View(context: Context) : TextureView(context
 	private fun dpToPx(dp: Float): Float =
 		TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, dp, resources.displayMetrics)
 
-
-	private fun invalidateTimeline() {
+	/**
+	 *  Invalidate the timeline and graph.
+	 *  Graph also need to be invalidated as we modify the graph bitmap size too
+	 *  Now in special cases like when only the bookmarks are updated this is not need
+	 */
+	private fun invalidateTimeline(redrawGraph: Boolean = true) {
 		_timelineCached.store(false)
 		_isDataAvailable = true
 
-		// invalidate the timeline
-		initiateCacheBitmaps(width, height, resetGraphCache = false)
+		initiateCacheBitmaps(width, height, resetGraphCache = redrawGraph)
 		Log.i(TAG, "REDRAWING TIMELINE")
 	}
 
+	/**
+	 *  Invalidate only the graph.
+	 *  Graph is only invalidated no timeline changes
+	 */
 	private fun resetGraphCache() {
 		_graphCacheCanvas?.drawColor(Color.TRANSPARENT, PorterDuff.Mode.CLEAR)
 		_cachedGraphDataSize = 0
 		_isDataAvailable = true
 
-		// invalidate the graph
+		// invalidate the graph but keep the timeline
 		initiateCacheBitmaps(width, height, resetTimelineCache = false)
 		Log.i(TAG, "REDRAWING GRAPH")
 	}
@@ -353,7 +373,7 @@ internal class PlayerAmplitudeGraph2View(context: Context) : TextureView(context
 
 		// Only invalidate if bookmarks actually changed redraw the timeline
 		if (_bookMarkTimeStamps.size != oldSize) {
-			invalidateTimeline()
+			invalidateTimeline(redrawGraph = false)
 			_isDataAvailable = true
 			Log.d(TAG, "BOOKMARKS SIZE CHANGED")
 		}

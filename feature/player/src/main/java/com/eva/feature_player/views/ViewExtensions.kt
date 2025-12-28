@@ -131,7 +131,7 @@ fun Canvas.drawTimeLine(
 
 fun Canvas.drawTimeLineWithBookMarks(
 	totalDurationInMillis: Long,
-	bookMarks: Set<Int>,
+	bookMarks: Iterable<Int>,
 	dpToPx: (Float) -> Float,
 	imageSize: Float = 20f,
 	textSizeInSp: Float = 16f,

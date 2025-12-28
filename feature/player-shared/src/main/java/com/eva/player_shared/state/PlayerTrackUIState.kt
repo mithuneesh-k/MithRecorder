@@ -35,9 +35,9 @@ class PlayerTrackUIState {
 			.flatMapLatest { isSeeking ->
 				Log.d(TAG, "IS SEEKING $isSeeking")
 				// if the user is not seeking the item original track data is given
-				if (!isSeeking) originalTrackData
+				if (!isSeeking) return@flatMapLatest originalTrackData
 				// now user is seeking so we provide the seek data
-				else combine(originalTrackData, _seekAmountByUser) { track, current ->
+				combine(originalTrackData, _seekAmountByUser) { track, current ->
 					track.copy(current = current)
 				}
 			}

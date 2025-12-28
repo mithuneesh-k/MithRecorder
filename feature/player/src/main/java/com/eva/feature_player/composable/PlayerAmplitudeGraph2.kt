@@ -99,11 +99,14 @@ fun PlayerAmplitudeGraph2(
 		update = { view ->
 			// enable gesture detection
 			view.isSwipeToScrollEnabled = isSwipeToScrollEnabled
-			view.onUpdateTrackDuration(totalTrackDuration)
-			view.onUpdateBookMarks(bookMarkTimeStamps)
-			view.onUpdatePlotColor(plotColor.toArgb())
-			view.onUpdatePlayRatio { trackPlayRatio() }
-			view.onUpdateGraphData { graphData() }
+			// if the view is visible then only show the values
+			if (view.isShown) {
+				view.onUpdateTrackDuration(totalTrackDuration)
+				view.onUpdateBookMarks(bookMarkTimeStamps)
+				view.onUpdatePlotColor(plotColor.toArgb())
+				view.onUpdatePlayRatio { trackPlayRatio() }
+				view.onUpdateGraphData { graphData() }
+			}
 		},
 		onRelease = { view -> view.cleanUp() },
 		modifier = modifier.defaultMinSize(minHeight = dimensionResource(id = R.dimen.line_graph_min_height))

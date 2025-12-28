@@ -13,6 +13,7 @@ internal class GraphScrollListener(
 	private val onScrollStart: (Float) -> Unit = {},
 	private val onScrollEnd: () -> Unit = {},
 	private val onScroll: (Float) -> Unit,
+	private val flingEnabled: Boolean = true,
 ) : GestureDetector.SimpleOnGestureListener(), Choreographer.FrameCallback {
 
 	private var _isScrolling = false
@@ -26,7 +27,7 @@ internal class GraphScrollListener(
 		get() = _scrollRatioInternal == 0f || _scrollRatioInternal == 1f
 
 	override fun onDown(e: MotionEvent): Boolean {
-		stopFling()
+		if (flingEnabled) stopFling()
 		return true
 	}
 
@@ -43,12 +44,12 @@ internal class GraphScrollListener(
 
 	override fun onFling(e1: MotionEvent?, e2: MotionEvent, velocityX: Float, velocityY: Float)
 			: Boolean {
-		startFling(velocityX)
+		if (flingEnabled) startFling(velocityX)
 		return true
 	}
 
 	override fun doFrame(frameTimeNanos: Long) {
-		if (!_isFlinging) return
+		if (flingEnabled && !_isFlinging) return
 
 		if (_lastFrameTimeNanos == 0L) {
 			_lastFrameTimeNanos = frameTimeNanos
@@ -115,10 +116,11 @@ internal class GraphScrollListener(
 		onScrollEnd()
 	}
 
-	fun markScrollStarted(positionX: Float) {
+	fun markScrollStarted(positionX: Float, scrollRatio: Float) {
 		_isScrolling = true
 		stopFling()
 		Log.d(TAG, "SCROLL STARTED =$positionX")
 		onScrollStart(positionX)
+		_scrollRatioInternal = scrollRatio
 	}
 }
