@@ -13,7 +13,7 @@
   <color name="on_primary_container">#005950</color>
 
   <color name="notification_button_color">#000000</color>
-  <color name="ic_launcher_background">#FFF1FFE8</color>
+  <color name="ic_launcher_background">#FF0A1128</color>
 
   <color name="tailwind_color_red">#F87171</color>
   <color name="tailwind_color_orange">#FB923C</color>

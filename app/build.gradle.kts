@@ -71,7 +71,7 @@ android {
 		}
 		debug {
 			applicationIdSuffix = ".debug"
-			resValue("string", "app_name", "RecorderApp (DEBUG)")
+			resValue("string", "app_name", "MithRecorder (DEBUG)")
 		}
 	}
 	compileOptions {

@@ -1,34 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
   android:width="108dp"
   android:height="108dp"
-  android:viewportWidth="24"
-  android:viewportHeight="24">
-  <group
-    android:name="splash_icon_group"
-    android:pivotX="12"
-    android:pivotY="12"
-    android:scaleX="0.5"
-    android:scaleY="0.5">
-    <path
-      android:fillColor="#00000000"
-      android:pathData="M18.24,16A8,8 0,0 1,5.76 16"
-      android:strokeWidth="2"
-      android:strokeColor="#FF406836"
-      android:strokeLineCap="round"
-      android:strokeLineJoin="round" />
-    <path
-      android:fillColor="#00000000"
-      android:pathData="M12,19L12,21"
-      android:strokeWidth="2"
-      android:strokeColor="#FF406836"
-      android:strokeLineCap="round"
-      android:strokeLineJoin="round" />
-    <path
-      android:fillColor="#00000000"
-      android:pathData="M12,15h0a4,4 0,0 1,-4 -4V7a4,4 0,0 1,4 -4h0a4,4 0,0 1,4 4v4A4,4 0,0 1,12 15Z"
-      android:strokeWidth="2"
-      android:strokeColor="#FF246A4B"
-      android:strokeLineCap="round"
-      android:strokeLineJoin="round" />
-  </group>
+  android:viewportWidth="108"
+  android:viewportHeight="108">
+
+  <!-- Abstract soundwave that elegantly forms an 'M' shape in the center -->
+  <path
+    android:fillColor="#00000000"
+    android:pathData="M26,54 C32,54 36,54 40,46 C44,38 46,26 50,38 C54,50 54,82 58,82 C62,82 62,50 66,38 C70,26 72,38 76,46 C80,54 84,54 90,54"
+    android:strokeWidth="4"
+    android:strokeColor="#FFFFFF"
+    android:strokeLineCap="round"
+    android:strokeLineJoin="round" />
+
 </vector>
