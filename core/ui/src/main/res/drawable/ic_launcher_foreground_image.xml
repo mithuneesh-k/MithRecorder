@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Bitmap foreground for the adaptive icon using the waveform logo PNG.
+     gravity="center" ensures it's always centered within the 108dp safe zone.
+     The system squircle mask applies the curved edges automatically. -->
+<bitmap xmlns:android="http://schemas.android.com/apk/res/android"
+  android:src="@mipmap/ic_launcher"
+  android:gravity="center"
+  android:tileMode="disabled" />
