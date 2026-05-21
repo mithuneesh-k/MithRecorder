@@ -2,7 +2,7 @@
 <adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
   <!-- Pure white background — system applies the squircle/rounded shape -->
   <background android:drawable="@color/ic_launcher_background" />
-  <!-- Foreground: the waveform PNG scaled to fill the safe zone -->
+  <!-- Foreground: the brand-new logo image -->
   <foreground android:drawable="@drawable/ic_launcher_foreground_image" />
-  <monochrome android:drawable="@drawable/ic_launcher_foreground" />
+  <monochrome android:drawable="@drawable/ic_launcher_foreground_image" />
 </adaptive-icon>
